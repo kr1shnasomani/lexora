@@ -1,0 +1,70 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './contexts/AuthContext'
+import ProtectedRoute from './components/shared/ProtectedRoute'
+
+// Shared
+import ModeSelectionPage from './pages/ModeSelectionPage'
+
+// Admin pages
+import DashboardPage from './pages/admin/DashboardPage'
+import ClaimsQueuePage from './pages/admin/ClaimsQueuePage'
+import ThreatFeedPage from './pages/admin/ThreatFeedPage'
+import AuditLogPage from './pages/admin/AuditLogPage'
+import AnalyticsPage from './pages/admin/AnalyticsPage'
+import NetworkGraphPage from './pages/admin/NetworkGraphPage'
+import ConfigPage from './pages/admin/ConfigPage'
+
+// Customer pages
+import HomePage from './pages/customer/HomePage'
+import PoliciesPage from './pages/customer/PoliciesPage'
+import ClaimsPage from './pages/customer/ClaimsPage'
+import ClaimResultPage from './pages/customer/ClaimResultPage'
+import ExplorePage from './pages/customer/ExplorePage'
+import PolicyDetailPage from './pages/customer/PolicyDetailPage'
+import DocsPage from './pages/customer/DocsPage'
+import ProfilePage from './pages/customer/ProfilePage'
+import NotificationsPage from './pages/customer/NotificationsPage'
+import SecurityPage from './pages/customer/SecurityPage'
+import ChatPage from './pages/customer/ChatPage'
+import RenewalPage from './pages/customer/RenewalPage'
+
+export default function App() {
+    return (
+        <AuthProvider>
+            <BrowserRouter>
+                <Routes>
+                    {/* ─── Landing ─────────────────────────────────── */}
+                    <Route path="/" element={<ModeSelectionPage />} />
+
+                    {/* ─── Admin portal (/admin/*) ─────────────────── */}
+                    <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><DashboardPage /></ProtectedRoute>} />
+                    <Route path="/admin/claims" element={<ProtectedRoute requiredRole="admin"><ClaimsQueuePage /></ProtectedRoute>} />
+                    <Route path="/admin/threat-feed" element={<ProtectedRoute requiredRole="admin"><ThreatFeedPage /></ProtectedRoute>} />
+                    <Route path="/admin/audit" element={<ProtectedRoute requiredRole="admin"><AuditLogPage /></ProtectedRoute>} />
+                    <Route path="/admin/analytics" element={<ProtectedRoute requiredRole="admin"><AnalyticsPage /></ProtectedRoute>} />
+                    <Route path="/admin/network" element={<ProtectedRoute requiredRole="admin"><NetworkGraphPage /></ProtectedRoute>} />
+                    <Route path="/admin/config" element={<ProtectedRoute requiredRole="admin"><ConfigPage /></ProtectedRoute>} />
+                    {/* Redirect bare /admin → /admin/dashboard */}
+                    <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+
+                    {/* ─── Customer portal (/customer/*) ──────────── */}
+                    <Route path="/customer" element={<ProtectedRoute requiredRole="customer"><HomePage /></ProtectedRoute>} />
+                    <Route path="/customer/policies" element={<ProtectedRoute requiredRole="customer"><PoliciesPage /></ProtectedRoute>} />
+                    <Route path="/customer/claims" element={<ProtectedRoute requiredRole="customer"><ClaimsPage /></ProtectedRoute>} />
+                    <Route path="/customer/claim-result" element={<ProtectedRoute requiredRole="customer"><ClaimResultPage /></ProtectedRoute>} />
+                    <Route path="/customer/explore" element={<ProtectedRoute requiredRole="customer"><ExplorePage /></ProtectedRoute>} />
+                    <Route path="/customer/policy-detail" element={<ProtectedRoute requiredRole="customer"><PolicyDetailPage /></ProtectedRoute>} />
+                    <Route path="/customer/docs" element={<ProtectedRoute requiredRole="customer"><DocsPage /></ProtectedRoute>} />
+                    <Route path="/customer/profile" element={<ProtectedRoute requiredRole="customer"><ProfilePage /></ProtectedRoute>} />
+                    <Route path="/customer/notifications" element={<ProtectedRoute requiredRole="customer"><NotificationsPage /></ProtectedRoute>} />
+                    <Route path="/customer/security" element={<ProtectedRoute requiredRole="customer"><SecurityPage /></ProtectedRoute>} />
+                    <Route path="/customer/chat" element={<ProtectedRoute requiredRole="customer"><ChatPage /></ProtectedRoute>} />
+                    <Route path="/customer/renewal" element={<ProtectedRoute requiredRole="customer"><RenewalPage /></ProtectedRoute>} />
+
+                    {/* ─── Catch-all ───────────────────────────────── */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+            </BrowserRouter>
+        </AuthProvider>
+    )
+}

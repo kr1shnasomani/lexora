@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    font-family: 'Space Grotesk', sans-serif;
+    background-color: #0A0A0C;
+    color: #f1f5f9;
+    overflow-x: hidden;
+    min-height: 100vh;
+}
+
+/* ── Scrollbars ───────────────────────────────────── */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #181a20;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #2a2d35;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #e83049;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* ── Admin Utility Classes ────────────────────────── */
+.glow-effect {
+    background: radial-gradient(circle at center, rgba(232, 48, 73, 0.15) 0%, rgba(10, 10, 12, 0) 70%);
+}
+
+.card-hover:hover {
+    box-shadow: 0 0 30px rgba(232, 48, 73, 0.15);
+    border-color: #e83049;
+}
+
+.bg-grid-pattern {
+    background-size: 40px 40px;
+    background-image:
+        linear-gradient(to right, #2a2d35 1px, transparent 1px),
+        linear-gradient(to bottom, #2a2d35 1px, transparent 1px);
+    mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+}
+
+/* ── Customer Toggle Switch ───────────────────────── */
+.toggle-checkbox:checked {
+    right: 0;
+    border-color: #e83049;
+}
+
+.toggle-checkbox:checked+.toggle-label {
+    background-color: #e83049;
+}
