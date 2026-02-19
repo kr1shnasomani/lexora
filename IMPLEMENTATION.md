@@ -1,2981 +1,2787 @@
-# LEXORA: Complete Implementation Plan
-
-## Table of Contents
-1. [Project Overview](#project-overview)
-2. [Development Environment Setup](#development-environment-setup)
-3. [Phase 1: Foundation Setup](#phase-1-foundation-setup)
-4. [Phase 2: Layer 1 - Perception Engine](#phase-2-layer-1---perception-engine)
-5. [Phase 3: Layer 2 - Policy Engine](#phase-3-layer-2---policy-engine)
-6. [Phase 4: Layer 3 - Fraud Detection](#phase-4-layer-3---fraud-detection)
-7. [Phase 5: Layer 4 - Decision Engine](#phase-5-layer-4---decision-engine)
-8. [Phase 6: Layer 5 - Audit & Learning](#phase-6-layer-5---audit--learning)
-9. [Phase 7: Frontend Implementation](#phase-7-frontend-implementation)
-10. [Phase 8: Integration & Testing](#phase-8-integration--testing)
-11. [Phase 9: Demo Preparation](#phase-9-demo-preparation)
+# LEXORA: Definitive Implementation Guide
+## For LLM Code Generation
 
 ---
 
-## Project Overview
+## Document Purpose
 
-### Tech Stack Summary
-```
-Frontend: Next.js + TypeScript + TailwindCSS + Shadcn/ui
-Backend: FastAPI + Python 3.11
-Workflow: n8n (Layer 1 orchestration)
-AI/ML: Gemma 3, Gemini 2.5 Flash Lite, Groq Whisper, Cohere, Jina AI
-Databases: PostgreSQL, Qdrant, Neo4j, Redis
-Deployment: Docker + Docker Compose
-```
+**This is a requirements specification, not a code tutorial.**
 
-### Project Structure
-```
-lexora/
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── config.py
-│   │   ├── database.py
-│   │   ├── models/
-│   │   │   ├── __init__.py
-│   │   │   ├── schemas.py
-│   │   │   ├── policy_models.py
-│   │   │   ├── fraud_models.py
-│   │   │   └── decision_models.py
-│   │   ├── layers/
-│   │   │   ├── __init__.py
-│   │   │   ├── layer1_perception/
-│   │   │   ├── layer2_policy/
-│   │   │   ├── layer3_fraud/
-│   │   │   ├── layer4_decision/
-│   │   │   └── layer5_audit/
-│   │   ├── api/
-│   │   │   ├── __init__.py
-│   │   │   ├── routes.py
-│   │   │   └── dependencies.py
-│   │   └── utils/
-│   │       ├── __init__.py
-│   │       └── helpers.py
-│   ├── tests/
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   └── .env.example
-├── frontend/
-│   ├── src/
-│   │   ├── app/
-│   │   │   ├── page.tsx
-│   │   │   ├── layout.tsx
-│   │   │   ├── dashboard/
-│   │   │   ├── claims/
-│   │   │   └── review/
-│   │   ├── components/
-│   │   │   ├── ui/
-│   │   │   ├── ClaimUpload.tsx
-│   │   │   ├── ClaimDashboard.tsx
-│   │   │   ├── FraudNetwork.tsx
-│   │   │   └── ReviewInterface.tsx
-│   │   ├── lib/
-│   │   │   ├── api.ts
-│   │   │   └── utils.ts
-│   │   └── types/
-│   │       └── index.ts
-│   ├── public/
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── tailwind.config.js
-│   └── next.config.js
-├── n8n/
-│   ├── workflows/
-│   │   ├── claim_processing.json
-│   │   └── file_router.json
-│   └── credentials/
-├── docker-compose.yml
-├── .env.example
-└── README.md
-```
+After reading this document, you (the LLM implementer) should know:
+- WHAT to build (exact requirements)
+- WHY it's built that way (design decisions)
+- WHAT to avoid (anti-patterns)
+- HOW to validate it works (acceptance criteria)
+
+**You choose HOW to implement it** (frameworks, patterns, optimizations) as long as requirements are met.
 
 ---
 
-## Development Environment Setup
+## Day-0 Fixes (Apply Before Writing Any Code)
 
-### Prerequisites
-```bash
-# Required installations
-- Docker Desktop (or Docker + Docker Compose)
-- Node.js 18+ and npm
-- Python 3.11+
-- Git
-- VS Code (recommended)
+> These are **blocking structural corrections** to the original plan. Every item below MUST be resolved in your first migration and first code review pass before any layer implementation begins.
+
+### A · Claim Data Shape — One Canonical Form
+
+- **Problem:** The original plan mixes normalized columns (`invoice_number`, `claimed_amount`, `provider_name`) with JSON path reads (`financial->>'invoice_number'`) in the same SQL queries. These are contradictory.
+- **Fix:** Canonical claim fields are **normalized columns** on the `claims` table (see Component 1 DDL). The full Layer-1 AI output is stored verbatim in `claims.extraction_raw JSONB` for audit and replay purposes only.
+- **Rule:** All SQL — Tier-1 fraud checks, policy evaluation, reporting — reads **normalized columns only**. JSON path operators (`->`, `->>`) are never used in WHERE clauses or business logic. `extraction_raw` is written once, never queried for logic.
+
+### B · Identifier Consistency — One Claim ID Everywhere
+
+- **Problem:** The original plan uses `policy_number` as a claim identifier in Qdrant payloads. `policy_number` is an external, human-readable, potentially reusable string — it must never be a system ID.
+- **Fix:** `claims.id` (UUID v4) is the **sole claim identifier** across every subsystem: Postgres, Qdrant, Neo4j, and all audit records.
+- **Rule:** `policy_number` is a plain VARCHAR field on `claims`. It appears in display and external comms only. Qdrant payloads store `claim_id` (the UUID). Neo4j `Claim` nodes merge exclusively on `{id: $claim_id}`.
+
+### C · Audit Design — Append-Only Event Log
+
+- **Problem:** The original `audit_logs` table has one wide row per claim (`layer_1_output`, `layer_2_output` columns). This breaks on retries (which row is updated?), makes partial progress invisible, and cannot represent multiple events per stage.
+- **Fix:** `audit_logs` is replaced by `audit_events` — an append-only table with one row per processing event. Schema: `id, claim_id, stage, event_type, payload, model_versions, duration_ms, created_at`.
+- **Rule:** `audit_events` is INSERT-only. No UPDATE, no DELETE, ever. Every retry, error, and success is a new row. Replaying all rows for a `claim_id` ordered by `created_at` must reproduce the full processing history.
+
+### D · Canonical Status & Decision Enums — Separated
+
+- **Problem:** The original plan conflates lifecycle position and decision outcome into a single status field, using inconsistent casing and values across DB and code.
+- **Fix:** Two strictly separated fields: `claims.status` (lifecycle position) and `claims.final_decision` (outcome, set only when a terminal status is reached).
+- **Canonical status values:** `submitted → extracting → extracted → policy_evaluating → fraud_checking → deciding → finalized` (terminal happy path), plus `under_review`, `fraud_investigation`, `error` as terminal states.
+- **Canonical final_decision values:** `auto_approve | auto_reject | manual_review | fraud_investigation`
+- **Rule:** Code, queries, and tests must use these exact lowercase snake_case values. No uppercase, no synonyms. `final_decision` is NULL until a terminal status is set.
+
+### E · Postgres Hardening
+
+- **Fix 1:** `CREATE EXTENSION IF NOT EXISTS pgcrypto;` must be the first statement in the baseline migration so `gen_random_uuid()` is available.
+- **Fix 2:** All timestamp columns use `TIMESTAMPTZ` (not `TIMESTAMP`). Timezone-naive timestamps are banned.
+- **Fix 3:** `CHECK` constraints on all monetary fields (`> 0`) and all 0..1 float fields (`BETWEEN 0.0 AND 1.0`).
+- **Fix 4:** `policy_rules` uniqueness is `UNIQUE (policy_type, version)` — not a global `UNIQUE` on `version` alone, which would prevent the same version string across different policy types.
+- **Fix 5:** `effective_to` enforced by `CHECK (effective_to IS NULL OR effective_to > effective_from)`.
+
+---
+
+## Critical Principles (Non-Negotiable)
+
+### 1. Configuration Over Code
+**Rule:** Business logic parameters MUST be in database, NEVER hardcoded.
+
+**Examples:**
+- ❌ WRONG: `if fraud_score > 0.7: investigate`
+- ✅ RIGHT: `if fraud_score > config.get('fraud.investigation_threshold'): investigate`
+
+**Why:** Rules change. Different insurance products have different thresholds. Code deployment for config changes is unacceptable.
+
+**Enforcement:** Code review fails if ANY numeric threshold, weight, or business rule is hardcoded.
+
+---
+
+### 2. Explainability First
+**Rule:** Every decision MUST have a complete, reproducible audit trail.
+
+**Requirements:**
+- Store exact inputs used
+- Store exact rule/model versions used
+- Store exact outputs produced
+- Store calculation steps (for policy decisions)
+- Store reasoning (for fraud flags)
+
+**Test:** Given an audit log from 6 months ago, can you reproduce the EXACT same decision?
+
+**Why:** Legal compliance. Fraud accusations must be defensible. Claim denials must be justified.
+
+---
+
+### 3. Fail-Safe Defaults
+**Rule:** When uncertain, route to human review. NEVER auto-approve questionable claims.
+
+**Decision Tree:**
+```
+If (low confidence OR missing data OR layer failure OR unknown pattern):
+    → final_decision = 'manual_review', status = 'under_review'
+Else if (high fraud):
+    → final_decision = 'fraud_investigation', status = 'fraud_investigation'
+Else if (policy violation):
+    → final_decision = 'auto_reject', status = 'finalized'
+Else if (low fraud AND high confidence AND policy approved):
+    → final_decision = 'auto_approve', status = 'finalized'
+Else:
+    → final_decision = 'manual_review', status = 'under_review'  (default)
 ```
 
-### Initial Setup Steps
+**Why:** False negatives (paying fraudulent claims) are costly. False positives (flagging valid claims) are recoverable through review.
 
-#### Step 1: Clone and Setup Repository
-```bash
-# Create project directory
-mkdir lexora
-cd lexora
+---
 
-# Initialize git
-git init
+### 4. Deterministic Decisions
+**Rule:** Layers 2 and 4 MUST be pure functions (same input = same output).
 
-# Create folder structure
-mkdir -p backend/app/{models,layers,api,utils}
-mkdir -p backend/tests
-mkdir -p frontend/src/{app,components,lib,types}
-mkdir -p n8n/{workflows,credentials}
+**NO randomness, NO AI model calls in:**
+- Policy rule execution
+- Benefit calculation
+- Decision routing logic
+
+**Why:** Legal defensibility requires reproducibility.
+
+---
+
+### 5. Idempotency
+**Rule:** Same claim submitted twice = Same result returned.
+
+**Requirements:**
+- Use idempotency keys (request_id or hash of claim data)
+- Check for duplicates BEFORE processing
+- Return existing result if duplicate detected
+
+**Why:** Users retry. Networks fail. Webhooks retry. We must handle it gracefully.
+
+---
+
+### 6. Proper Entity Relationships
+**Rule:** Use correct IDs for correct purposes.
+
+**Critical:**
+- Claim has its own UUID (claim.id)
+- Policy has its own UUID (policy.id)
+- claim.policy_id is a foreign key to policy.id
+- NEVER use policy_number as claim.id
+- NEVER use policy_number as graph node ID
+
+**Why:** Policy numbers are external identifiers. They can be reused, changed, or non-unique. Internal IDs must be UUIDs.
+
+---
+
+### 7. Schema Enforcement
+**Rule:** Extracted data MUST conform to strict schema before proceeding.
+
+**Requirements:**
+- Define JSON schema for extraction output
+- Validate ALL fields (type, format, constraints)
+- If validation fails → Retry extraction with enhanced prompt
+- If still fails → Manual review (do NOT guess/fix data)
+
+**Why:** Garbage in = garbage out. Invalid data corrupts downstream processing.
+
+---
+
+### 8. Separation of Concerns
+**Rule:** AI for perception, Code for decisions.
+
+**Layer 1 (AI):** Extract data, assess confidence
+**Layer 2 (Code):** Apply rules, calculate benefits
+**Layer 3 (Hybrid):** Detect patterns (rules + vectors + graph)
+**Layer 4 (Code):** Route decision
+**Layer 5 (Code):** Log + Learn
+
+**Why:** Legal liability. AI can be uncertain; policy application cannot be.
+
+---
+
+## Anti-Patterns (What NOT to Do)
+
+### ❌ Anti-Pattern 1: Trusting AI Output Without Validation
 ```
+# WRONG
+extracted_data = gemini.extract(document)
+policy_engine.evaluate(extracted_data)  # What if data is malformed?
 
-#### Step 2: Environment Variables
-```bash
-# Create .env file in root
-cat > .env << EOF
-# API Keys
-GEMINI_API_KEY=your_gemini_key_here
-GROQ_API_KEY=your_groq_key_here
-COHERE_API_KEY=your_cohere_key_here
-JINA_API_KEY=your_jina_key_here
-
-# Database URLs
-DATABASE_URL=postgresql://admin:changeme@localhost:5432/lexora
-REDIS_URL=redis://localhost:6379/0
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=changeme
-
-# n8n
-N8N_WEBHOOK_URL=http://localhost:5678
-
-# App Settings
-SECRET_KEY=your-secret-key-here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-EOF
-```
-
-#### Step 3: Docker Compose Setup
-```yaml
-# docker-compose.yml
-version: '3.8'
-
-services:
-  # PostgreSQL
-  postgres:
-    image: postgres:15-alpine
-    container_name: lexora-postgres
-    environment:
-      POSTGRES_DB: lexora
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: changeme
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Redis
-  redis:
-    image: redis:7-alpine
-    container_name: lexora-redis
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Qdrant
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: lexora-qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Neo4j
-  neo4j:
-    image: neo4j:5-community
-    container_name: lexora-neo4j
-    environment:
-      NEO4J_AUTH: neo4j/changeme
-      NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_dbms_security_procedures_unrestricted: apoc.*
-    ports:
-      - "7474:7474"  # HTTP
-      - "7687:7687"  # Bolt
-    volumes:
-      - neo4j_data:/data
-    healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "changeme", "RETURN 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # n8n
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: lexora-n8n
-    environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=admin
-      - N8N_BASIC_AUTH_PASSWORD=changeme
-      - WEBHOOK_URL=http://localhost:5678/
-    ports:
-      - "5678:5678"
-    volumes:
-      - n8n_data:/home/node/.n8n
-      - ./n8n/workflows:/home/node/workflows
-    depends_on:
-      - postgres
-      - redis
-
-volumes:
-  postgres_data:
-  qdrant_data:
-  neo4j_data:
-  n8n_data:
-```
-
-#### Step 4: Start Infrastructure
-```bash
-# Start all databases and n8n
-docker-compose up -d
-
-# Verify all services are running
-docker-compose ps
-
-# Check logs if any issues
-docker-compose logs -f
+# RIGHT
+extracted_data = gemini.extract(document)
+validated_data = validate_schema(extracted_data)
+if not validated_data.is_valid:
+    retry_or_manual_review()
+policy_engine.evaluate(validated_data)
 ```
 
 ---
 
-## Phase 1: Foundation Setup
+### ❌ Anti-Pattern 2: Hardcoded Business Logic
+```
+# WRONG
+if fraud_score > 0.7:
+    decision = "investigate"
 
-**Duration:** 2-3 hours  
-**Goal:** Setup backend, frontend, and database schemas
-
-### Task 1.1: Backend Foundation
-
-#### Create Backend Structure
-```bash
-cd backend
-
-# Create requirements.txt
-cat > requirements.txt << EOF
-# Core Framework
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
-
-# Database
-sqlalchemy==2.0.25
-psycopg2-binary==2.9.9
-alembic==1.13.1
-
-# Redis & Celery
-redis==5.0.1
-celery==5.3.6
-
-# AI/ML
-google-generativeai==0.3.2
-cohere==4.37
-jina==3.23.0
-
-# Vector & Graph DB
-qdrant-client==1.7.3
-neo4j==5.16.0
-
-# Validation & Utils
-pydantic==2.6.0
-pydantic-settings==2.1.0
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-dotenv==1.0.0
-requests==2.31.0
-pillow==10.2.0
-
-# Testing
-pytest==7.4.3
-pytest-asyncio==0.21.1
-httpx==0.25.2
-EOF
-
-# Install dependencies
-pip install -r requirements.txt
+# RIGHT
+threshold = config.get("fraud.investigation_threshold", default=0.7)
+if fraud_score > threshold:
+    decision = "investigate"
 ```
 
-#### Create Config File
-```python
-# backend/app/config.py
+---
 
-from pydantic_settings import BaseSettings
-from functools import lru_cache
+### ❌ Anti-Pattern 3: Using Wrong IDs
+```
+# WRONG
+graph.add_node("Claim", id=claim.policy_number)
 
-class Settings(BaseSettings):
-    # API Keys
-    GEMINI_API_KEY: str
-    GROQ_API_KEY: str
-    COHERE_API_KEY: str
-    JINA_API_KEY: str
-    
-    # Database URLs
-    DATABASE_URL: str
-    REDIS_URL: str
-    QDRANT_HOST: str
-    QDRANT_PORT: int
-    NEO4J_URI: str
-    NEO4J_USER: str
-    NEO4J_PASSWORD: str
-    
-    # n8n
-    N8N_WEBHOOK_URL: str
-    
-    # App Settings
-    SECRET_KEY: str
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
-    class Config:
-        env_file = "../.env"
-        case_sensitive = True
-
-@lru_cache()
-def get_settings():
-    return Settings()
-
-settings = get_settings()
+# RIGHT
+graph.add_node("Claim", id=claim.id)  # claim.id is UUID
 ```
 
-#### Create Database Connection
-```python
-# backend/app/database.py
+---
 
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from app.config import settings
+### ❌ Anti-Pattern 4: Missing Timeout Handling
+```
+# WRONG
+response = external_api.call(data)
 
-# PostgreSQL
-engine = create_engine(settings.DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# Redis
-import redis
-redis_client = redis.from_url(settings.REDIS_URL)
-
-# Qdrant
-from qdrant_client import QdrantClient
-qdrant_client = QdrantClient(
-    host=settings.QDRANT_HOST,
-    port=settings.QDRANT_PORT
-)
-
-# Neo4j
-from neo4j import GraphDatabase
-neo4j_driver = GraphDatabase.driver(
-    settings.NEO4J_URI,
-    auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD)
-)
+# RIGHT
+response = external_api.call(data, timeout=30)
+if response.timeout:
+    retry_with_backoff()
 ```
 
-#### Create Main FastAPI App
-```python
-# backend/app/main.py
+---
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings
+### ❌ Anti-Pattern 5: No Idempotency Check
+```
+# WRONG
+def submit_claim(files, policy_number):
+    claim = create_new_claim()
+    process(claim)
 
-app = FastAPI(
-    title="Lexora API",
-    description="Neuro-Symbolic Claims Intelligence Platform",
-    version="1.0.0"
-)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.get("/")
-def read_root():
-    return {"message": "Lexora API is running"}
-
-@app.get("/health")
-def health_check():
-    return {
-        "status": "healthy",
-        "version": "1.0.0"
-    }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# RIGHT
+def submit_claim(files, policy_number, request_id):
+    existing = find_claim_by_idempotency_key(request_id)
+    if existing:
+        return existing
+    claim = create_new_claim(idempotency_key=request_id)
+    process(claim)
 ```
 
-#### Test Backend
-```bash
-# Run backend
-cd backend
-python -m app.main
+---
 
-# Test in browser: http://localhost:8000
-# Should see: {"message": "Lexora API is running"}
+### ❌ Anti-Pattern 6: Incomplete Audit Trail
+```
+# WRONG
+audit_log.save({
+    "claim_id": claim.id,
+    "decision": "approved"
+})
+
+# RIGHT
+audit_log.save({
+    "claim_id": claim.id,
+    "decision": "approved",
+    "policy_version": policy.version,
+    "fraud_weights": [0.3, 0.3, 0.4],
+    "thresholds": {...},
+    "model_versions": {...},
+    "calculation_trail": [...]
+})
 ```
 
-### Task 1.2: Frontend Foundation
+---
 
-#### Initialize Next.js Project
-```bash
-cd frontend
+### ❌ Anti-Pattern 7: Sequential Layer Calls in API Endpoint
+```
+# WRONG (blocking, no retry, no state tracking)
+@app.post("/claims")
+def process_claim(files):
+    layer1_result = layer1.extract(files)
+    layer2_result = layer2.evaluate(layer1_result)
+    layer3_result = layer3.analyze(layer1_result)
+    layer4_result = layer4.decide(...)
+    return layer4_result
 
-# Create Next.js app with TypeScript
-npx create-next-app@latest . --typescript --tailwind --app --no-src-dir
-
-# Install dependencies
-npm install @radix-ui/react-icons lucide-react
-npm install @tanstack/react-query axios
-npm install recharts react-flow-renderer
-npm install class-variance-authority clsx tailwind-merge
-
-# Install Shadcn UI
-npx shadcn-ui@latest init
-
-# Add Shadcn components
-npx shadcn-ui@latest add button
-npx shadcn-ui@latest add card
-npx shadcn-ui@latest add table
-npx shadcn-ui@latest add badge
-npx shadcn-ui@latest add dialog
-npx shadcn-ui@latest add form
-npx shadcn-ui@latest add input
-npx shadcn-ui@latest add label
-npx shadcn-ui@latest add select
-npx shadcn-ui@latest add tabs
-npx shadcn-ui@latest add toast
+# RIGHT (async, state machine, retryable)
+@app.post("/claims")
+def submit_claim(files, request_id):
+    claim = create_claim_record(status="submitted", idempotency_key=request_id)
+    queue_for_processing(claim.id)
+    return {"claim_id": claim.id, "status": "submitted"}
 ```
 
-#### Create API Client
-```typescript
-// frontend/src/lib/api.ts
+---
 
-import axios from 'axios';
+### ❌ Anti-Pattern 8: Assuming API Calls Always Succeed
+```
+# WRONG
+embedding = cohere.embed(text)
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-export const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Types
-export interface ClaimSubmission {
-  files: File[];
-  policyNumber?: string;
-}
-
-export interface ClaimDecision {
-  decision: 'auto_approve' | 'auto_reject' | 'manual_review' | 'fraud_investigation';
-  expected_loss: number;
-  benefit_amount?: number;
-  rationale: string;
-  confidence_level: string;
-  next_steps: string[];
-}
-
-// API functions
-export const claimsApi = {
-  // Submit claim
-  submitClaim: async (data: ClaimSubmission): Promise<ClaimDecision> => {
-    const formData = new FormData();
-    data.files.forEach(file => formData.append('files', file));
-    if (data.policyNumber) {
-      formData.append('policy_number', data.policyNumber);
-    }
-    
-    const response = await api.post('/api/v1/claims/process', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-    return response.data;
-  },
-  
-  // Get claim details
-  getClaim: async (claimId: string) => {
-    const response = await api.get(`/api/v1/claims/${claimId}`);
-    return response.data;
-  },
-  
-  // Get all claims
-  getAllClaims: async () => {
-    const response = await api.get('/api/v1/claims');
-    return response.data;
-  },
-};
+# RIGHT
+try:
+    embedding = cohere.embed(text, timeout=30)
+except Timeout:
+    retry_with_backoff()
+except RateLimitError:
+    queue_for_later()
+except APIError as e:
+    log_error(e)
+    manual_review()
 ```
 
-#### Create Basic Layout
-```typescript
-// frontend/src/app/layout.tsx
+---
 
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
+## Component Specifications
 
-const inter = Inter({ subsets: ['latin'] });
+---
 
-export const metadata: Metadata = {
-  title: 'Lexora - Claims Intelligence Platform',
-  description: 'AI-powered insurance claims processing',
-};
+## Component 1: Database Schema Design
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="en">
-      <body className={inter.className}>
-        <div className="min-h-screen bg-gray-50">
-          {children}
-        </div>
-      </body>
-    </html>
-  );
-}
-```
+### Goal
+Define data structures that support all requirements without introducing anomalies.
 
-#### Test Frontend
-```bash
-# Run frontend
-npm run dev
+### Critical Requirements
 
-# Open browser: http://localhost:3000
-```
+#### 1.1 Claims Table
+**Purpose:** Primary entity representing an insurance claim.
 
-### Task 1.3: Database Schema Setup
+> **Day-0 patch applied:** normalized columns only, `extraction_raw` added, `TIMESTAMPTZ` throughout, canonical status/decision enums, corrected CHECK constraints. See Day-0 Fix A, D, E.
 
-#### Create PostgreSQL Tables
+**DDL:**
 ```sql
--- backend/migrations/001_initial_schema.sql
+-- Must be first statement in baseline migration (Day-0 Fix E)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Users table
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    hashed_password VARCHAR(255) NOT NULL,
-    full_name VARCHAR(255),
-    role VARCHAR(50) NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- Lifecycle position of a claim in the processing pipeline
+CREATE TYPE claim_status AS ENUM (
+    'submitted',           -- Initial state after upload
+    'extracting',          -- Layer 1 in progress
+    'extracted',           -- Layer 1 complete
+    'policy_evaluating',   -- Layer 2 in progress
+    'fraud_checking',      -- Layer 3 in progress
+    'deciding',            -- Layer 4 in progress
+    'finalized',           -- Layer 4 complete; see claims.final_decision for outcome
+    'under_review',        -- Routed to manual underwriter queue
+    'fraud_investigation', -- Routed to SIU
+    'error'                -- Permanent failure; requires manual intervention
 );
 
-CREATE INDEX idx_users_email ON users(email);
+-- Final ruling — set only when status transitions to 'finalized', 'under_review', or 'fraud_investigation'
+CREATE TYPE claim_final_decision AS ENUM (
+    'auto_approve',
+    'auto_reject',
+    'manual_review',
+    'fraud_investigation'
+);
 
--- Policies table
+CREATE TYPE incident_type_enum AS ENUM (
+    'accident', 'illness', 'theft', 'damage', 'other'
+);
+
+CREATE TYPE policy_type_enum AS ENUM (
+    'health', 'auto', 'property', 'life'
+);
+
+CREATE TABLE claims (
+    -- Identity
+    id                    UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    claim_number          VARCHAR(100)  NOT NULL UNIQUE,  -- e.g. CLM-2024-001234
+    policy_id             UUID          NOT NULL REFERENCES policies(id),
+    idempotency_key       VARCHAR(255)  NOT NULL UNIQUE,
+
+    -- Lifecycle: status = where it is now; final_decision = what was ruled (set together with terminal status)
+    status                claim_status        NOT NULL DEFAULT 'submitted',
+    final_decision        claim_final_decision,        -- NULL until terminal status reached
+    current_state_context JSONB               NOT NULL DEFAULT '{}',
+
+    -- Claimant info (normalized columns — populated after Layer 1 validation)
+    claimant_name         VARCHAR(255),
+    claimant_phone        VARCHAR(50),
+    incident_date         DATE,
+    incident_type         incident_type_enum,
+    incident_description  TEXT,
+
+    -- Financial (normalized columns)
+    claimed_amount        NUMERIC(12,2)  CHECK (claimed_amount IS NULL OR claimed_amount > 0),
+    approved_amount       NUMERIC(12,2)  CHECK (approved_amount IS NULL OR approved_amount > 0),
+    provider_name         VARCHAR(255),
+    invoice_number        VARCHAR(255),
+
+    -- Layer-1 verbatim AI output.
+    -- Initialized to '{}' on claim creation (submitted status).
+    -- Updated exactly once when status transitions extracting → extracted.
+    -- Never queried for business logic — for audit/replay only.
+    extraction_raw        JSONB          NOT NULL DEFAULT '{}',
+
+    -- Layer-1 metadata
+    extraction_confidence FLOAT          CHECK (extraction_confidence IS NULL OR extraction_confidence BETWEEN 0.0 AND 1.0),
+    extraction_warnings   JSONB          NOT NULL DEFAULT '[]',
+
+    -- Layer-2 output
+    policy_decision       JSONB,
+
+    -- Layer-3 output
+    fraud_score           FLOAT          CHECK (fraud_score IS NULL OR fraud_score BETWEEN 0.0 AND 1.0),
+    fraud_analysis        JSONB,
+
+    -- Layer-4 output
+    decision_rationale    TEXT,
+    decision_output       JSONB,
+
+    -- Review tracking
+    reviewed_by           UUID           REFERENCES users(id),
+    reviewed_at           TIMESTAMPTZ,
+
+    -- Timestamps (all TIMESTAMPTZ — no naive timestamps permitted)
+    submitted_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    processed_at          TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_approved_lte_claimed
+        CHECK (approved_amount IS NULL OR claimed_amount IS NULL OR approved_amount <= claimed_amount)
+);
+```
+
+**Indexes Required:**
+```sql
+CREATE INDEX idx_claims_status      ON claims(status);
+CREATE INDEX idx_claims_policy      ON claims(policy_id);
+CREATE INDEX idx_claims_idempotency ON claims(idempotency_key);
+CREATE INDEX idx_claims_submitted   ON claims(submitted_at);
+CREATE INDEX idx_claims_invoice     ON claims(invoice_number) WHERE invoice_number IS NOT NULL;
+CREATE INDEX idx_claims_claimant    ON claims(claimant_name);
+CREATE INDEX idx_claims_fraud_score ON claims(fraud_score) WHERE status = 'finalized';
+```
+
+---
+
+#### 1.2 Missing Referenced Tables (Full DDL)
+
+> **Patch 6 applied:** The original guide referenced `users`, `policies`, `claim_documents`, and a `feedback` table without defining them. Every table `claims` joins or references must be defined in the baseline migration. All timestamps are `TIMESTAMPTZ`. Enum approach is Postgres `CREATE TYPE` throughout — no mixing with `CHECK` constraints.
+
+```sql
+-- -------------------------------------------------------
+-- USERS
+-- -------------------------------------------------------
+CREATE TYPE user_role AS ENUM ('underwriter', 'admin', 'auditor', 'siu');
+
+CREATE TABLE users (
+    id           UUID       PRIMARY KEY DEFAULT gen_random_uuid(),
+    email        VARCHAR(255) NOT NULL UNIQUE,
+    full_name    VARCHAR(255) NOT NULL,
+    role         user_role  NOT NULL DEFAULT 'underwriter',
+    is_active    BOOLEAN    NOT NULL DEFAULT TRUE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- -------------------------------------------------------
+-- POLICIES
+-- Fields required by Layer-2 rule loading:
+--   policy_number, policy_type, rules_version, start/end dates
+-- -------------------------------------------------------
 CREATE TABLE policies (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    policy_number VARCHAR(100) UNIQUE NOT NULL,
-    policy_holder_name VARCHAR(255) NOT NULL,
-    policy_type VARCHAR(100) NOT NULL,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    status VARCHAR(50) NOT NULL,
-    rules_version VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id               UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
+    policy_number    VARCHAR(100)      NOT NULL UNIQUE,
+    policy_type      policy_type_enum  NOT NULL,
+    rules_version    VARCHAR(50)       NOT NULL,   -- FK-like ref into policy_rules.version
+    holder_name      VARCHAR(255)      NOT NULL,
+    holder_email     VARCHAR(255),
+    policy_start_date DATE             NOT NULL,
+    policy_end_date   DATE             NOT NULL,
+    annual_limit     NUMERIC(12,2)     NOT NULL CHECK (annual_limit > 0),
+    is_active        BOOLEAN           NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_policy_dates CHECK (policy_end_date > policy_start_date)
 );
 
 CREATE INDEX idx_policies_number ON policies(policy_number);
+CREATE INDEX idx_policies_type   ON policies(policy_type);
 
--- Policy rules table
-CREATE TABLE policy_rules (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    version VARCHAR(50) UNIQUE NOT NULL,
-    policy_type VARCHAR(100) NOT NULL,
-    rules_json JSONB NOT NULL,
-    approved_by UUID REFERENCES users(id),
-    effective_from DATE NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Claims table
-CREATE TABLE claims (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    claim_number VARCHAR(100) UNIQUE NOT NULL,
-    policy_id UUID REFERENCES policies(id),
-    claimant_name VARCHAR(255) NOT NULL,
-    incident_date DATE NOT NULL,
-    incident_type VARCHAR(100),
-    incident_description TEXT,
-    claimed_amount DECIMAL(12, 2) NOT NULL,
-    approved_amount DECIMAL(12, 2),
-    status VARCHAR(50) NOT NULL,
-    decision VARCHAR(50),
-    extraction_confidence FLOAT,
-    fraud_score FLOAT,
-    expected_loss DECIMAL(12, 2),
-    decision_rationale TEXT,
-    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    processed_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_claims_number ON claims(claim_number);
-CREATE INDEX idx_claims_policy ON claims(policy_id);
-CREATE INDEX idx_claims_status ON claims(status);
-
--- Claim documents table
+-- -------------------------------------------------------
+-- CLAIM DOCUMENTS
+-- Stores file metadata + sha256 for cross-claim dedupe.
+-- Storage key is the path in S3/local (never raw file data).
+-- -------------------------------------------------------
 CREATE TABLE claim_documents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    claim_id UUID REFERENCES claims(id) ON DELETE CASCADE,
-    document_type VARCHAR(100) NOT NULL,
-    file_name VARCHAR(255) NOT NULL,
-    file_path VARCHAR(500) NOT NULL,
-    mime_type VARCHAR(100),
-    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    claim_id         UUID         NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+    storage_provider TEXT         NOT NULL DEFAULT 'local', -- 'local' | 's3'
+    storage_key      TEXT         NOT NULL,
+    sha256           CHAR(64)     NOT NULL,   -- hex SHA-256 of raw file bytes
+    file_name        VARCHAR(255) NOT NULL,
+    content_type     VARCHAR(100) NOT NULL,
+    size_bytes       BIGINT       NOT NULL CHECK (size_bytes > 0),
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_claim_docs_claim ON claim_documents(claim_id);
+CREATE INDEX idx_claim_documents_claim  ON claim_documents(claim_id);
+CREATE INDEX idx_claim_documents_sha256 ON claim_documents(sha256);
+-- Cross-claim duplicate doc detection: query sha256 across different claim_ids
 
--- Audit logs table
-CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    claim_id UUID REFERENCES claims(id),
-    layer_1_output JSONB,
-    layer_2_output JSONB,
-    layer_3_output JSONB,
-    layer_4_output JSONB,
-    processing_time_ms INTEGER,
-    model_versions JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- -------------------------------------------------------
+-- CLAIM LINE ITEMS (optional — for partial approvals)
+-- If final_decision supports per-line adjudication, use this.
+-- -------------------------------------------------------
+CREATE TABLE claim_line_items (
+    id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    claim_id        UUID          NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+    line_no         INTEGER       NOT NULL,
+    description     TEXT          NOT NULL,
+    claimed_amount  NUMERIC(12,2) NOT NULL CHECK (claimed_amount > 0),
+    approved_amount NUMERIC(12,2) CHECK (approved_amount IS NULL OR approved_amount >= 0),
+    line_decision   TEXT          CHECK (line_decision IN ('approved','rejected','partial')),
+    reason          TEXT,
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_claim_line UNIQUE (claim_id, line_no)
 );
 
-CREATE INDEX idx_audit_logs_claim ON audit_logs(claim_id);
+CREATE INDEX idx_line_items_claim ON claim_line_items(claim_id);
 
--- Feedback table
+-- -------------------------------------------------------
+-- FEEDBACK
+-- Captures human reviewer overrides for retraining.
+-- -------------------------------------------------------
 CREATE TABLE feedback (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    claim_id UUID REFERENCES claims(id),
-    reviewed_by UUID REFERENCES users(id),
-    system_decision VARCHAR(50) NOT NULL,
-    human_decision VARCHAR(50) NOT NULL,
-    disagreement BOOLEAN GENERATED ALWAYS AS (system_decision != human_decision) STORED,
-    feedback_notes TEXT,
-    used_for_training BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    claim_id          UUID        NOT NULL REFERENCES claims(id),
+    reviewed_by       UUID        NOT NULL REFERENCES users(id),
+    system_decision   claim_final_decision NOT NULL,
+    human_decision    claim_final_decision NOT NULL,
+    feedback_category TEXT        NOT NULL,  -- e.g. 'fraud_missed', 'false_positive', 'policy_error'
+    feedback_notes    TEXT,
+    flagged_for_retraining BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_feedback_claim ON feedback(claim_id);
-CREATE INDEX idx_feedback_disagreement ON feedback(disagreement) WHERE disagreement = TRUE;
-```
-
-#### Run Database Migration
-```bash
-# Connect to PostgreSQL and run migration
-docker exec -i lexora-postgres psql -U admin -d lexora < backend/migrations/001_initial_schema.sql
-```
-
-#### Initialize Qdrant Collections
-```python
-# backend/scripts/init_qdrant.py
-
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
-
-client = QdrantClient(host="localhost", port=6333)
-
-# Create collections
-collections = [
-    {
-        "name": "claim_images",
-        "size": 512,  # Jina CLIP dimension
-        "distance": Distance.COSINE
-    },
-    {
-        "name": "claim_texts",
-        "size": 1024,  # Cohere embed-english-v3.0
-        "distance": Distance.COSINE
-    }
-]
-
-for collection in collections:
-    try:
-        client.create_collection(
-            collection_name=collection["name"],
-            vectors_config=VectorParams(
-                size=collection["size"],
-                distance=collection["distance"]
-            )
-        )
-        print(f"Created collection: {collection['name']}")
-    except Exception as e:
-        print(f"Collection {collection['name']} already exists or error: {e}")
-```
-
-```bash
-# Run initialization
-python backend/scripts/init_qdrant.py
-```
-
-#### Initialize Neo4j Constraints
-```cypher
-// Run in Neo4j Browser: http://localhost:7474
-
-// Create constraints
-CREATE CONSTRAINT claim_id IF NOT EXISTS FOR (c:Claim) REQUIRE c.id IS UNIQUE;
-CREATE CONSTRAINT person_id IF NOT EXISTS FOR (p:Person) REQUIRE p.id IS UNIQUE;
-CREATE CONSTRAINT provider_id IF NOT EXISTS FOR (p:Provider) REQUIRE p.id IS UNIQUE;
-CREATE CONSTRAINT contact_value IF NOT EXISTS FOR (c:Contact) REQUIRE c.value IS UNIQUE;
-CREATE CONSTRAINT financial_id IF NOT EXISTS FOR (f:Financial) REQUIRE f.identifier IS UNIQUE;
-
-// Create indexes
-CREATE INDEX claim_date IF NOT EXISTS FOR (c:Claim) ON (c.date);
-CREATE INDEX person_name IF NOT EXISTS FOR (p:Person) ON (p.name);
+CREATE INDEX idx_feedback_retraining ON feedback(flagged_for_retraining) WHERE flagged_for_retraining = TRUE;
 ```
 
 ---
 
-## Phase 2: Layer 1 - Perception Engine
+#### 1.3 Configuration Table
+**Purpose:** Store ALL business logic parameters.
 
-**Duration:** 4-6 hours  
-**Goal:** Build n8n workflow and data extraction pipeline
+```sql
+CREATE TYPE config_type_enum AS ENUM ('threshold', 'weight', 'feature_flag', 'rule');
 
-### Task 2.1: n8n Workflow Setup
+CREATE TABLE configuration (
+    id           UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
+    config_key   VARCHAR(255)      NOT NULL UNIQUE,
+    config_value JSONB             NOT NULL,
+    config_type  config_type_enum  NOT NULL,
+    description  TEXT,
+    version      INTEGER           NOT NULL DEFAULT 1,
+    updated_by   UUID              REFERENCES users(id),
+    updated_at   TIMESTAMPTZ       NOT NULL DEFAULT NOW()
+);
 
-#### Access n8n
-```bash
-# n8n should be running at: http://localhost:5678
-# Login: admin / changeme
+CREATE INDEX idx_config_key ON configuration(config_key);
 ```
 
-#### Create Claim Processing Workflow
-
-**Step 1: Create New Workflow**
-1. Open n8n at http://localhost:5678
-2. Click "New Workflow"
-3. Name it "Claim Processing Pipeline"
-
-**Step 2: Add Webhook Trigger**
-1. Add node: "Webhook"
-2. Configure:
-   - HTTP Method: POST
-   - Path: claim-upload
-   - Response Mode: Last Node
-3. Test URL will be: http://localhost:5678/webhook/claim-upload
-
-**Step 3: Add File Router**
-1. Add node: "Switch"
-2. Connect from Webhook
-3. Configure routes:
-   ```
-   Mode: Rules
-   Route 1: {{ $json.body.file_type }} === 'pdf' → PDF Branch
-   Route 2: {{ $json.body.file_type }} === 'image' → Image Branch
-   Route 3: {{ $json.body.file_type }} === 'video' → Video Branch
-   Route 4: {{ $json.body.file_type }} === 'audio' → Audio Branch
-   ```
-
-**Step 4: PDF Processing Branch**
+**Required Initial Configurations:**
 ```
-Switch → Extract Text from PDF → HTTP Request (Gemma 3 Analysis)
+INSERT INTO configuration (config_key, config_value, config_type, description) VALUES
+('fraud.tier1.velocity_threshold', '5', 'threshold', 'Max claims per claimant in 7 days'),
+('fraud.tier2.image_similarity_threshold', '0.95', 'threshold', 'Image similarity cutoff'),
+('fraud.tier2.text_similarity_threshold', '0.90', 'threshold', 'Text similarity cutoff'),
+('fraud.fusion.weights', '[0.3, 0.3, 0.4]', 'weight', 'Tier 1, 2, 3 weights'),
+('fraud.high_threshold', '0.7', 'threshold', 'Score above this → investigation'),
+('fraud.low_threshold', '0.2', 'threshold', 'Score below this → safe'),
+('decision.investigation_cost', '150.0', 'threshold', 'Cost of manual review USD'),
+('extraction.min_confidence', '0.85', 'threshold', 'Min confidence to proceed'),
+('features.fraud_tier3.enabled', 'true', 'feature_flag', 'Enable graph analysis');
 ```
 
-1. **Extract Text from PDF Node:**
-   - Node: "Execute Command"
-   - Command: `pdftotext {{ $json.file_path }} -`
-   - Or use: "PDF" node (built-in)
+---
 
-2. **Gemma 3 Analysis Node:**
-   - Node: "HTTP Request"
-   - Method: POST
-   - URL: Google AI Studio Gemma endpoint
-   - Body:
-   ```json
-   {
-     "contents": [{
-       "parts": [{
-         "text": "Analyze this insurance claim text and extract: policy_number, claimant_name, incident_date, incident_description, claimed_amount, provider_name. Return as JSON.\n\nText: {{ $json.extracted_text }}"
-       }]
-     }]
-   }
-   ```
+#### 1.4 Audit Events Table
+**Purpose:** Complete, immutable, append-only trail of every processing event across all layers.
 
-**Step 5: Image Processing Branch**
-```
-Switch → HTTP Request (Gemma 3 Image Analysis)
-```
+> **Day-0 patch applied:** Replaces the original wide `audit_logs` table. The wide-column design (one row per claim with `layer_1_output`, `layer_2_output` columns) cannot handle retries or partial progress. See Day-0 Fix C.
 
-1. **Gemma 3 Image Analysis:**
-   - Node: "HTTP Request"
-   - Method: POST
-   - URL: Gemma 3 API endpoint
-   - Body: Send image + prompt for analysis
+**DDL:**
+```sql
+CREATE TABLE audit_events (
+    id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    claim_id       UUID        NOT NULL REFERENCES claims(id),
 
-**Step 6: Video Processing Branch**
-```
-Switch → HTTP Request (Gemini 2.5 Flash Lite)
-```
+    -- Which processing stage emitted this event
+    stage          TEXT        NOT NULL,  -- e.g. 'layer_1', 'layer_2', 'layer_3_tier1', 'layer_4'
+    -- What happened at this stage
+    event_type     TEXT        NOT NULL,  -- e.g. 'started', 'succeeded', 'failed', 'retried', 'manual_review_routed'
 
-1. **Gemini Video Analysis:**
-   - Node: "HTTP Request"
-   - Method: POST
-   - URL: https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent
-   - Headers: `x-goog-api-key: {{ $env.GEMINI_API_KEY }}`
-   - Body:
-   ```json
-   {
-     "contents": [{
-       "parts": [
-         {"text": "Analyze this insurance claim video. Extract incident details, damage assessment, and generate a structured summary."},
-         {"file_data": {"mime_type": "video/mp4", "file_uri": "{{ $json.file_uri }}"}}
-       ]
-     }]
-   }
-   ```
+    -- Full input/output snapshot for this event (enables exact replay)
+    payload        JSONB       NOT NULL DEFAULT '{}',
 
-**Step 7: Audio Processing Branch**
-```
-Switch → Groq Whisper → Gemma 3 Analysis
+    -- Exact model/rule versions active at the time of this event
+    model_versions JSONB       NOT NULL DEFAULT '{}',
+
+    -- How long this event took
+    duration_ms    INTEGER,
+
+    -- TIMESTAMPTZ is mandatory — ordering by this column reconstructs processing history
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_audit_events_claim_time ON audit_events(claim_id, created_at);
+CREATE INDEX idx_audit_events_stage      ON audit_events(stage);
+CREATE INDEX idx_audit_events_payload    ON audit_events USING GIN(payload);
 ```
 
-1. **Groq Whisper Node:**
-   - Node: "HTTP Request"
-   - Method: POST
-   - URL: https://api.groq.com/openai/v1/audio/transcriptions
-   - Headers: `Authorization: Bearer {{ $env.GROQ_API_KEY }}`
-   - Body: audio file + model: whisper-large-v3-turbo
+**Usage pattern:**
+```python
+# Every layer emits events — never updates a single row
+audit_events.insert({
+    "claim_id": claim.id,
+    "stage": "layer_1",
+    "event_type": "succeeded",
+    "payload": {
+        "extracted_fields": {...},       # exact AI output
+        "field_confidences": {...},
+        "overall_confidence": 0.92,
+        "warnings": [],
+        "prompt_used": "...",            # exact prompt sent to AI
+        "source_files": [...]
+    },
+    "model_versions": {"extraction_model": "gemma-3-27b"},
+    "duration_ms": 3420
+})
 
-2. **Gemma 3 Analysis:**
-   - Same as PDF analysis but on transcribed text
+# On retry, insert a new row — do NOT update the failed row
+audit_events.insert({
+    "claim_id": claim.id,
+    "stage": "layer_1",
+    "event_type": "retried",
+    "payload": {"attempt": 2, "error": "timeout", "retry_reason": "..."},
+    "model_versions": {"extraction_model": "gemma-3-27b"},
+    "duration_ms": 60000
+})
+```
 
-**Step 8: Merge and Structure Output**
-1. Add "Merge" node to combine all branches
-2. Add "Set" node to structure final output:
+**Critical:** This table is **INSERT-ONLY**. Never UPDATE or DELETE rows. Replay any past decision by selecting all `audit_events` for a `claim_id` ordered by `created_at`.
+
+---
+
+---
+
+#### 1.5 Policy Rules Table
+**Purpose:** Version-controlled policy definitions.
+
+> **Day-0 patch applied:** `version` is no longer globally UNIQUE — uniqueness is scoped to `(policy_type, version)` so different product lines can share version strings. All timestamps are TIMESTAMPTZ. See Day-0 Fix E.
+
+**Required Columns:**
+```sql
+CREATE TABLE policy_rules (
+    id               UUID             PRIMARY KEY DEFAULT gen_random_uuid(),
+    policy_type      policy_type_enum NOT NULL,   -- e.g. 'health', 'auto'
+    version          VARCHAR(50)      NOT NULL,   -- e.g. 'v2.3'
+    rules_definition JSONB            NOT NULL,
+    effective_from   DATE             NOT NULL,
+    effective_to     DATE,                        -- NULL = currently active
+    approved_by      UUID             REFERENCES users(id),
+    approved_at      TIMESTAMPTZ,
+    is_active        BOOLEAN          NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+
+    -- Uniqueness is per product line, not global
+    CONSTRAINT uq_policy_rules_type_version UNIQUE (policy_type, version),
+    -- No ambiguity: effective_to must be after effective_from
+    CONSTRAINT chk_policy_rules_dates
+        CHECK (effective_to IS NULL OR effective_to > effective_from)
+);
+
+CREATE INDEX idx_policy_rules_type_active ON policy_rules(policy_type, is_active);
+CREATE INDEX idx_policy_rules_effective   ON policy_rules(effective_from, effective_to);
+```
+
+**Example rules_definition Structure:**
 ```json
 {
-  "policy_number": "{{ $json.analysis.policy_number }}",
-  "claimant_name": "{{ $json.analysis.claimant_name }}",
-  "incident": {
-    "date": "{{ $json.analysis.incident_date }}",
-    "type": "{{ $json.analysis.incident_type }}",
-    "description": "{{ $json.analysis.incident_description }}"
+  "coverage_categories": {
+    "medical": {
+      "covered": true,
+      "annual_limit": 50000.00,
+      "copay_percentage": 20,
+      "waiting_period_days": 30,
+      "exclusions": ["cosmetic", "experimental"]
+    }
   },
-  "financial": {
-    "claimed_amount": "{{ $json.analysis.claimed_amount }}",
-    "provider_name": "{{ $json.analysis.provider_name }}"
-  },
-  "confidence": "{{ $json.analysis.confidence }}",
-  "source_file_type": "{{ $json.file_type }}"
+  "validation_rules": [
+    {"check": "incident_date >= policy_start", "error": "Incident before policy start"}
+  ]
 }
 ```
 
-**Step 9: Send to FastAPI**
-1. Add final "HTTP Request" node
-2. Method: POST
-3. URL: http://host.docker.internal:8000/api/v1/claims/from-n8n
-4. Body: Structured output from previous step
+---
 
-**Step 10: Save Workflow**
-- Click Save
-- Export workflow as JSON to `n8n/workflows/claim_processing.json`
+### Validation Criteria
 
-### Task 2.2: Backend Layer 1 Integration
+**Test 1: Correct IDs**
+```sql
+-- This should return 0 rows (no policy_number used as claim ID)
+SELECT * FROM claims WHERE id IN (SELECT policy_number FROM policies);
+```
 
-#### Create Pydantic Schemas
+**Test 2: No Hardcoded Values**
+```sql
+-- All business logic params should be in config table
+SELECT COUNT(*) FROM configuration WHERE config_key LIKE 'fraud%' OR config_key LIKE 'decision%';
+-- Should be >= 8
+```
+
+**Test 3: Audit Trail Completeness**
+```sql
+-- Every claim that reached any terminal status has at least one audit_events row
+SELECT c.id, c.status FROM claims c
+LEFT JOIN audit_events a ON c.id = a.claim_id
+WHERE c.status IN ('finalized', 'under_review', 'fraud_investigation', 'error')
+  AND a.id IS NULL;
+-- Should return 0 rows
+```
+
+**Test 4: Final Decision Only Set on Terminal Status**
+```sql
+-- final_decision must be NULL for all non-terminal statuses
+SELECT id, status, final_decision FROM claims
+WHERE status NOT IN ('finalized', 'under_review', 'fraud_investigation')
+  AND final_decision IS NOT NULL;
+-- Should return 0 rows
+
+-- final_decision must be set for all finalized claims
+SELECT id FROM claims
+WHERE status = 'finalized' AND final_decision IS NULL;
+-- Should return 0 rows
+```
+
+**Definition of Done:**
+- All tables created with correct types
+- All indexes created
+- All constraints enforced
+- Initial config data seeded
+- Validation tests pass
+
+---
+
+## Component 2: Layer 1 - Perception Engine
+
+### Goal
+Extract structured, validated data from multi-modal documents with quantified confidence.
+
+### Architecture Decision
+**Use n8n for orchestration** (handles file routing, external API calls)
+**Use FastAPI for validation** (receives n8n output, validates, stores)
+
+---
+
+### 2.1 n8n Workflow Requirements
+
+#### Workflow Entry Point
+**Trigger:** Webhook (POST to `/webhook/claim-upload`)
+
+**Expected Input:**
+```json
+{
+  "request_id": "UUID (for idempotency)",
+  "policy_number": "string (optional)",
+  "files": [
+    {
+      "file_id": "UUID",
+      "file_name": "claim.pdf",
+      "file_type": "pdf",
+      "file_data": "base64 or file path"
+    }
+  ]
+}
+```
+
+---
+
+#### File Type Router Node
+**Node Type:** Switch
+
+**Routing Logic:**
+```
+IF file_type == "pdf":
+    → PDF Processing Branch
+ELSE IF file_type IN ["png", "jpg", "jpeg"]:
+    → Image Processing Branch
+ELSE IF file_type IN ["mp4", "mov", "avi"]:
+    → Video Processing Branch
+ELSE IF file_type IN ["mp3", "wav", "m4a"]:
+    → Audio Processing Branch
+ELSE:
+    → Unsupported File Error
+```
+
+---
+
+#### PDF Processing Branch
+
+**Step 1: Text Extraction**
+- Use n8n's built-in PDF node OR Execute Command: `pdftotext`
+- Output: Plain text
+
+**Step 2: Gemma 3 Analysis**
+- HTTP Request to Gemma 3 API
+- Prompt:
+```
+You are an insurance claim data extractor. Extract these exact fields from the text below. Return ONLY valid JSON with no markdown, no preamble.
+
+Required fields:
+- policy_number (string)
+- claimant_name (string)
+- claimant_phone (string or null)
+- incident_date (YYYY-MM-DD format)
+- incident_type (one of: accident, illness, theft, damage, other)
+- incident_description (string)
+- claimed_amount (number, not string)
+- provider_name (string or null)
+- invoice_number (string or null)
+
+Also include:
+- field_confidence (object with confidence 0.0-1.0 for each field)
+- warnings (array of strings for any issues)
+
+Text to extract from:
+{{$json.extracted_text}}
+```
+
+**Step 3: Response Validation**
+- Check if response is valid JSON
+- If not valid JSON → Retry once with prompt: "You must return ONLY valid JSON"
+- If still not valid → Error (route to manual review)
+
+**Output:**
+```json
+{
+  "policy_number": "P-2024-001",
+  "claimant_name": "John Doe",
+  "incident_date": "2024-02-01",
+  "incident_type": "accident",
+  "incident_description": "...",
+  "claimed_amount": 1500.00,
+  "provider_name": "City Hospital",
+  "field_confidence": {
+    "policy_number": 0.95,
+    "claimant_name": 0.98,
+    "incident_date": 0.90,
+    "claimed_amount": 0.92
+  },
+  "warnings": []
+}
+```
+
+---
+
+#### Image Processing Branch
+
+**Step 1: Gemma 3 Vision Analysis**
+- HTTP Request to Gemma 3 Vision API
+- Send image as base64
+- Use same prompt as PDF (but for image content)
+
+**Output:** Same structure as PDF branch
+
+---
+
+#### Video Processing Branch
+
+**Step 1: Gemini 2.5 Flash Lite Analysis**
+- HTTP Request to Gemini API
+- Endpoint: `/v1/models/gemini-2.5-flash-lite:generateContent`
+- Prompt:
+```
+Analyze this insurance claim video. Extract:
+- What incident occurred
+- When it occurred (if visible/stated)
+- Visible damage/injuries
+- Any text visible (signs, documents)
+- Estimated claim amount if mentioned
+
+Return as JSON with same fields as document extraction.
+```
+
+**Output:** Same structure as PDF branch
+
+---
+
+#### Audio Processing Branch
+
+**Step 1: Groq Whisper Transcription**
+- HTTP Request to Groq API
+- Model: `whisper-large-v3-turbo`
+- Output: Transcribed text
+
+**Step 2: Gemma 3 Analysis**
+- Analyze transcript (same as PDF text)
+
+**Output:** Same structure as PDF branch
+
+---
+
+#### Merge Node
+**Purpose:** Combine results from all files.
+
+**Logic:**
+- If same field appears in multiple files:
+  - Use value with highest confidence
+  - Add warning: "Conflicting values found for [field]"
+- If critical field missing across all files:
+  - Set value to null
+  - Add warning: "Missing: [field]"
+
+---
+
+#### Confidence Calculation Node
+**Purpose:** Calculate overall extraction confidence.
+
+**Logic:**
+```javascript
+// Get all field confidences
+const confidences = Object.values(field_confidence);
+
+// Critical fields (weighted higher)
+const criticalFields = ['policy_number', 'claimant_name', 'incident_date', 'claimed_amount'];
+const criticalConfidences = criticalFields.map(f => field_confidence[f] || 0);
+
+// Weighted average
+const criticalWeight = 0.7;
+const nonCriticalWeight = 0.3;
+const avgCritical = average(criticalConfidences);
+const avgNonCritical = average(confidences.filter((v,i) => !criticalFields.includes(Object.keys(field_confidence)[i])));
+
+const overall_confidence = (criticalWeight * avgCritical) + (nonCriticalWeight * avgNonCritical);
+```
+
+---
+
+#### Schema Validation Node
+**Purpose:** Validate extracted data against strict schema.
+
+**Validations:**
+```
+1. policy_number: Present, non-empty string
+2. claimant_name: Present, non-empty string, min 2 chars
+3. incident_date: 
+   - Present
+   - Valid date format (YYYY-MM-DD)
+   - Not in future
+   - Not older than 2 years
+4. incident_type: One of allowed values
+5. incident_description: Present, min 10 chars
+6. claimed_amount:
+   - Present
+   - Number type (not string)
+   - Greater than 0
+   - Less than $1,000,000 (sanity check)
+```
+
+**If Validation Fails:**
+- Add specific error to warnings array
+- Set overall_confidence to max(overall_confidence - 0.2, 0.0)
+
+---
+
+#### Send to FastAPI Node
+**HTTP Request to Backend**
+
+**Endpoint:** `POST /api/v1/claims/from-n8n`
+
+**Payload:**
+```json
+{
+  "request_id": "{{$json.request_id}}",
+  "extraction_result": {
+    "policy_number": "...",
+    "claimant": {
+      "name": "...",
+      "phone": "..."
+    },
+    "incident": {
+      "date": "...",
+      "type": "...",
+      "description": "..."
+    },
+    "financial": {
+      "claimed_amount": 1500.00,
+      "provider_name": "...",
+      "invoice_number": "..."
+    }
+  },
+  "extraction_metadata": {
+    "model_used": "gemma-3",
+    "overall_confidence": 0.92,
+    "field_confidences": [...],
+    "warnings": [],
+    "source_files": [...]
+  }
+}
+```
+
+**Timeout:** 30 seconds
+
+**Retry Logic:**
+- If timeout or 5xx error → Retry 3 times
+- If 4xx error → Don't retry (bad request)
+
+---
+
+### 2.2 FastAPI Reception & Validation
+
+#### Endpoint: POST /api/v1/claims/from-n8n
+
+**Purpose:** Receive extraction from n8n, validate, store.
+
+**Request Handler Logic:**
+```
+1. Check idempotency key (request_id)
+   - If exists → Return existing claim
+   - If not → Continue
+
+2. Validate extraction against Pydantic schema
+   - If invalid → Return 400 with specific errors
+   - If valid → Continue
+
+3. Check confidence threshold
+   - Load threshold from config: extraction.min_confidence
+   - If below threshold → Mark needs_review = true
+
+4. Update claim record in database
+   NOTE: The claim row was already created with status='submitted' and
+   extraction_raw='{}' when the initial POST /api/v1/claims was received.
+   This step updates the existing row atomically:
+     - Write ALL normalized columns from validated extraction
+       (claimant_name, incident_date, incident_type, incident_description,
+        claimed_amount, provider_name, invoice_number, claimant_phone)
+     - Write extraction_raw = verbatim validated n8n payload (written ONCE here;
+       never overwritten again — this is the permanent audit copy)
+     - Write extraction_confidence, extraction_warnings
+     - Transition status: 'extracting' → 'extracted'
+     - This UPDATE is conditional on current status = 'extracting' to guard
+       against concurrent workers
+
+5. Queue for Layer 2 processing
+   - Add to Celery queue
+   - Return immediately (async processing)
+
+6. Return response:
+   {
+     "claim_id": "UUID",
+     "status": "extracted",
+     "needs_review": true/false,
+     "estimated_processing_time": "30 seconds"
+   }
+```
+
+---
+
+### 2.3 Pydantic Schema Definition
+
+**Requirements:**
+
 ```python
-# backend/app/models/schemas.py
-
-from pydantic import BaseModel, Field, validator
-from typing import Optional, List
-from datetime import date, datetime
-from enum import Enum
-
-class IncidentType(str, Enum):
-    ACCIDENT = "accident"
-    ILLNESS = "illness"
-    THEFT = "theft"
-    DAMAGE = "damage"
-    OTHER = "other"
+# Strict validation rules
 
 class ClaimantInfo(BaseModel):
-    name: str = Field(..., min_length=1)
-    date_of_birth: Optional[date] = None
-    contact_phone: Optional[str] = None
-    contact_email: Optional[str] = None
-
+    name: str = Field(..., min_length=2, max_length=255)
+    phone: Optional[str] = Field(None, regex=r'^\+?[\d\s\-\(\)]+$')
+    email: Optional[EmailStr] = None
+    
 class IncidentInfo(BaseModel):
     date: date
-    type: IncidentType
-    location: Optional[str] = None
+    type: Literal["accident", "illness", "theft", "damage", "other"]
     description: str = Field(..., min_length=10)
+    location: Optional[str] = None
     
     @validator('date')
-    def date_not_future(cls, v):
+    def validate_date(cls, v):
         if v > date.today():
-            raise ValueError('Incident date cannot be in the future')
+            raise ValueError("Incident date cannot be in future")
+        if v < date.today() - timedelta(days=730):  # 2 years
+            raise ValueError("Incident date too old")
         return v
 
 class FinancialInfo(BaseModel):
-    claimed_amount: float = Field(..., gt=0)
+    claimed_amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
     provider_name: Optional[str] = None
     invoice_number: Optional[str] = None
-
-class FieldConfidence(BaseModel):
-    field_name: str
-    value: any
-    confidence: float = Field(..., ge=0.0, le=1.0)
-
-class ExtractionMetadata(BaseModel):
-    model_used: str
-    extraction_timestamp: datetime
-    overall_confidence: float = Field(..., ge=0.0, le=1.0)
-    field_confidences: List[FieldConfidence]
-    warnings: List[str] = []
-    source_file_type: str
+    
+    @validator('claimed_amount')
+    def validate_amount(cls, v):
+        if v > 1000000:  # Sanity check
+            raise ValueError("Amount exceeds reasonable limit")
+        return v
 
 class ClaimExtraction(BaseModel):
-    policy_number: str
+    policy_number: str = Field(..., min_length=1, max_length=100)
     claimant: ClaimantInfo
     incident: IncidentInfo
     financial: FinancialInfo
-    extraction_metadata: ExtractionMetadata
     
-    @property
-    def is_high_confidence(self) -> bool:
-        return self.extraction_metadata.overall_confidence >= 0.85
-    
-    @property
-    def needs_review(self) -> bool:
-        return not self.is_high_confidence or len(self.extraction_metadata.warnings) > 0
+    class Config:
+        # Strict mode: extra fields not allowed
+        extra = "forbid"
 ```
-
-#### Create Layer 1 API Endpoint
-```python
-# backend/app/api/routes.py
-
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
-from app.models.schemas import ClaimExtraction
-from app.database import get_db
-import uuid
-
-router = APIRouter(prefix="/api/v1")
-
-@router.post("/claims/from-n8n")
-async def receive_from_n8n(
-    data: dict,
-    db: Session = Depends(get_db)
-):
-    """
-    Receive processed claim data from n8n workflow
-    """
-    try:
-        # Validate and structure data
-        extraction = ClaimExtraction(**data)
-        
-        # Store in database
-        claim_id = str(uuid.uuid4())
-        
-        # Insert into claims table
-        # (Actual SQL implementation here)
-        
-        return {
-            "claim_id": claim_id,
-            "status": "received",
-            "needs_review": extraction.needs_review
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-```
-
-#### Add Routes to Main App
-```python
-# backend/app/main.py
-
-from app.api.routes import router
-
-app.include_router(router)
-```
-
-### Task 2.3: Test Layer 1
-
-#### Test Workflow
-```bash
-# Upload test file via n8n webhook
-curl -X POST http://localhost:5678/webhook/claim-upload \
-  -H "Content-Type: application/json" \
-  -d '{
-    "file_type": "pdf",
-    "file_path": "/path/to/test.pdf"
-  }'
-```
-
-#### Verify Data Flow
-1. Check n8n execution log
-2. Verify FastAPI received data
-3. Check PostgreSQL for claim record
 
 ---
 
-## Phase 3: Layer 2 - Policy Engine
+### 2.4 Error Handling Requirements
 
-**Duration:** 3-4 hours  
-**Goal:** Implement policy rules execution
+**Timeout Scenarios:**
+- Gemini API timeout (>60s) → Retry once → Manual review if fails again
+- Groq Whisper timeout (>90s) → Retry once → Manual review if fails again
 
-### Task 3.1: Create Policy Models
+**API Error Scenarios:**
+- 429 Rate Limit → Exponential backoff (1s, 2s, 4s) → Queue if still failing
+- 401/403 Auth Error → Alert admin → Block further processing
+- 500 Server Error → Retry 3 times → Manual review
 
-```python
-# backend/app/models/policy_models.py
+**File Processing Errors:**
+- Corrupted PDF → Detect via header check → Reject with clear error
+- Unsupported format → Reject immediately with supported formats list
+- File too large (>50MB) → Reject before sending to AI
 
-from pydantic import BaseModel
-from typing import Dict, List, Optional
-from datetime import date
-from enum import Enum
+**JSON Parsing Errors:**
+- Invalid JSON response → Retry with enhanced prompt → Manual review if fails
+- Missing required fields → Add to warnings → Lower confidence → Proceed if threshold met
 
-class PolicyDecision(str, Enum):
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    AMBIGUOUS = "ambiguous"
+---
 
-class CoverageCategory(BaseModel):
-    covered: bool
-    annual_limit: Optional[float] = None
-    copay_percentage: float = 0
-    waiting_period_days: int = 0
-    exclusions: List[str] = []
+### Validation Criteria
 
-class PolicyRules(BaseModel):
-    version: str
-    policy_type: str
-    effective_from: date
-    coverage_categories: Dict[str, CoverageCategory]
-    validation_rules: List[str]
+**Test 1: Valid Extraction**
+- Input: Clean PDF with all fields
+- Expected: overall_confidence > 0.9, no warnings
+- Claim status: `extracted`
+- Backend receives data, validates, stores normalized columns, writes extraction_raw
 
-class PolicyDecisionOutput(BaseModel):
-    decision: PolicyDecision
-    benefit_amount: Optional[float] = None
-    rejection_reason: Optional[str] = None
-    rules_applied: List[str] = []
-    calculation_trail: List[str] = []
-    policy_version: str
+**Test 2: Low Confidence**
+- Input: Poor quality scan
+- Expected: overall_confidence < 0.85
+- Backend marks needs_review = true
+- Routes to manual review queue
+
+**Test 3: Invalid Data**
+- Input: Incident date in future
+- Expected: Pydantic validation fails
+- Returns 400 error with specific message
+
+**Test 4: API Timeout**
+- Simulate: Gemini API takes 70 seconds
+- Expected: Timeout after 60s, retry once, then manual review
+
+**Test 5: Duplicate Submission**
+- Input: Same request_id twice
+- Expected: Second request returns existing claim_id (no duplicate created)
+
+**Definition of Done:**
+- n8n workflow processes all 4 file types
+- All files routed correctly
+- Valid JSON extracted
+- Schema validation works
+- Confidence scoring accurate
+- Idempotency works
+- Errors handled gracefully
+- Tests pass
+
+---
+
+## Component 3: Layer 2 - Policy Governance Engine
+
+### Goal
+Apply deterministic policy rules to determine coverage and calculate benefits with complete reproducibility.
+
+### Critical Requirements
+
+**1. Pure Functions Only**
+- Given same input + same rule version → ALWAYS same output
+- No randomness, no external API calls, no timestamps in logic
+
+**2. Version Control**
+- Rules tied to effective dates
+- Claims use rule version from incident date, NOT processing date
+
+**3. Complete Calculation Trail**
+- Every step logged in human-readable format
+- Audit trail shows exact math performed
+
+---
+
+### 3.1 Policy Rule Loading
+
+**Function Signature:**
+```
+load_policy_rules(policy_id: UUID, incident_date: date) → PolicyRules
 ```
 
-### Task 3.2: Implement Policy Engine
+**Logic:**
+```
+1. Query policies table for policy_id
+2. Get rules_version from policy record
+3. Query policy_rules table WHERE:
+   - version = rules_version
+   - effective_from <= incident_date
+   - (effective_to IS NULL OR effective_to > incident_date)
+4. If no matching rules found → ERROR (cannot process claim)
+5. Parse rules_definition JSONB → PolicyRules object
+6. Return PolicyRules
+```
 
-```python
-# backend/app/layers/layer2_policy/engine.py
+**Edge Cases:**
+- Policy not found → Return error: "Invalid policy"
+- No rules for incident date → Return error: "No rules for date [date]"
+- Multiple rules match (shouldn't happen) → Return error: "Ambiguous rules"
 
-from typing import Tuple
-from datetime import date
-from app.models.schemas import ClaimExtraction
-from app.models.policy_models import (
-    PolicyRules, PolicyDecisionOutput, 
-    PolicyDecision, CoverageCategory
-)
+---
 
-class PolicyEngine:
-    """Layer 2: Policy Governance Engine"""
-    
-    def __init__(self, db):
-        self.db = db
-    
-    async def evaluate_claim(
-        self,
-        claim: ClaimExtraction,
-        policy_number: str,
-        claim_date: date
-    ) -> PolicyDecisionOutput:
-        """Evaluate claim against policy rules"""
-        
-        # Load policy rules
-        policy_rules = await self._load_policy_rules(policy_number, claim_date)
-        
-        output = PolicyDecisionOutput(
-            decision=PolicyDecision.AMBIGUOUS,
-            policy_version=policy_rules.version,
-            rules_applied=[],
-            calculation_trail=[]
+### 3.2 Validation Rules Execution
+
+**Purpose:** Check basic eligibility before coverage/benefit calculation.
+
+**Common Validation Rules:**
+```json
+{
+  "validation_rules": [
+    {
+      "check": "incident_date >= policy_start_date",
+      "error": "Incident occurred before policy started"
+    },
+    {
+      "check": "incident_date <= policy_end_date",
+      "error": "Incident occurred after policy ended"
+    },
+    {
+      "check": "claimed_amount > 0",
+      "error": "Claimed amount must be positive"
+    }
+  ]
+}
+```
+
+**Execution Logic:**
+```
+FOR EACH rule IN validation_rules:
+    IF rule.check evaluates to FALSE:
+        RETURN PolicyDecision(
+            decision="rejected",
+            rejection_reason=rule.error,
+            rules_applied=["validation_failed"]
         )
+    ELSE:
+        ADD rule.check to rules_applied
+RETURN "validation_passed"
+```
+
+**Important:** Fail fast. Stop at first failed validation.
+
+---
+
+### 3.3 Coverage Category Matching
+
+**Purpose:** Determine if incident type is covered.
+
+**Input:** incident_type from claim
+
+**Mapping (configurable):**
+```json
+{
+  "category_mapping": {
+    "accident": "accident_coverage",
+    "illness": "medical_coverage",
+    "dental_issue": "dental_coverage",
+    "theft": "property_coverage",
+    "damage": "property_coverage"
+  }
+}
+```
+
+**Logic:**
+```
+1. Map incident_type to category name
+2. Check if category exists in rules_definition.coverage_categories
+3. Check if category.covered == true
+4. If any check fails → Reject with reason
+
+Example rejection reasons:
+- "Incident type 'dental_issue' not found in policy"
+- "Category 'dental_coverage' is not covered under this policy"
+```
+
+**Output:**
+```
+coverage_category: str (e.g., "medical_coverage")
+category_rules: CoverageCategory object
+```
+
+---
+
+### 3.4 Waiting Period Check
+
+**Purpose:** Ensure coverage has activated.
+
+**Logic:**
+```
+days_since_policy_start = incident_date - policy_start_date
+waiting_period = category_rules.waiting_period_days
+
+IF days_since_policy_start < waiting_period:
+    REJECT with reason: "Waiting period not met. Required: {waiting_period} days, Elapsed: {days_since_policy_start} days"
+```
+
+**Edge Case:** Emergency coverage (bypass waiting period) - handled via special category or flag.
+
+---
+
+### 3.5 Exclusion Check
+
+**Purpose:** Ensure claim doesn't fall under policy exclusions.
+
+**Method:** Keyword matching in incident_description
+
+**Logic:**
+```
+description_lower = incident_description.lower()
+
+FOR EACH exclusion IN category_rules.exclusions:
+    IF exclusion.lower() IN description_lower:
+        REJECT with reason: "Excluded procedure: {exclusion}"
         
-        # Step 1: Validation rules
-        validation_passed, errors = self._run_validation(claim, policy_rules, output)
-        if not validation_passed:
-            output.decision = PolicyDecision.REJECTED
-            output.rejection_reason = "; ".join(errors)
-            return output
-        
-        # Step 2: Check coverage
-        category_covered, reason = self._check_coverage(claim, policy_rules, output)
-        if not category_covered:
-            output.decision = PolicyDecision.REJECTED
-            output.rejection_reason = reason
-            return output
-        
-        # Step 3: Check exclusions
-        is_excluded, exclusion_reason = self._check_exclusions(claim, policy_rules, output)
-        if is_excluded:
-            output.decision = PolicyDecision.REJECTED
-            output.rejection_reason = exclusion_reason
-            return output
-        
-        # Step 4: Calculate benefit
-        benefit = self._calculate_benefit(claim, policy_rules, output)
-        output.benefit_amount = benefit
-        output.decision = PolicyDecision.APPROVED
-        
-        return output
+PASS (no exclusions matched)
+```
+
+**Limitations:**
+- Simple keyword matching (not NLP)
+- May have false positives (word appears but different context)
+- Document this limitation
+
+**Example:**
+```
+Exclusions: ["cosmetic", "experimental"]
+Description: "Cosmetic surgery for scar removal"
+Result: REJECTED (keyword "cosmetic" found)
+```
+
+---
+
+### 3.6 Benefit Calculation
+
+**Goal:** Calculate insurer's payment amount.
+
+**Steps:**
+
+**Step 1: Apply Copay**
+```
+IF copay_percentage exists:
+    insurer_percentage = 1.0 - (copay_percentage / 100)
+    amount_after_copay = claimed_amount * insurer_percentage
+    LOG: "Applied {copay_percentage}% copay: ${claimed_amount} × {insurer_percentage} = ${amount_after_copay}"
+
+ELSE IF copay_fixed exists:
+    amount_after_copay = claimed_amount - copay_fixed
+    LOG: "Applied fixed copay: ${claimed_amount} - ${copay_fixed} = ${amount_after_copay}"
     
-    async def _load_policy_rules(self, policy_number: str, effective_date: date) -> PolicyRules:
-        """Load policy rules from database"""
-        # Query database for policy rules
-        # For now, return mock data
-        return PolicyRules(
-            version="v1.0",
-            policy_type="health",
-            effective_from=date(2024, 1, 1),
-            coverage_categories={
-                "medical": CoverageCategory(
-                    covered=True,
-                    annual_limit=50000,
-                    copay_percentage=20,
-                    exclusions=["cosmetic"]
-                )
-            },
-            validation_rules=[]
-        )
-    
-    def _run_validation(
-        self, 
-        claim: ClaimExtraction, 
-        policy: PolicyRules,
-        output: PolicyDecisionOutput
-    ) -> Tuple[bool, List[str]]:
-        """Run validation rules"""
-        errors = []
-        
-        # Claimed amount > 0
-        if claim.financial.claimed_amount <= 0:
-            errors.append("Claimed amount must be greater than zero")
-        output.rules_applied.append("amount_validation")
-        
-        # Incident date not in future
-        if claim.incident.date > date.today():
-            errors.append("Incident date cannot be in the future")
-        output.rules_applied.append("incident_date_check")
-        
-        return len(errors) == 0, errors
-    
-    def _check_coverage(
-        self,
-        claim: ClaimExtraction,
-        policy: PolicyRules,
-        output: PolicyDecisionOutput
-    ) -> Tuple[bool, Optional[str]]:
-        """Check if incident type is covered"""
-        
-        # Map incident type to category
-        category_map = {
-            "accident": "accident_coverage",
-            "illness": "medical",
-            "theft": "theft_coverage"
+ELSE:
+    amount_after_copay = claimed_amount
+    LOG: "No copay applied"
+```
+
+**Step 2: Apply Per-Incident Limit**
+```
+IF per_incident_limit exists:
+    benefit = min(amount_after_copay, per_incident_limit)
+    IF amount_after_copay > per_incident_limit:
+        LOG: "Applied per-incident limit: min(${amount_after_copay}, ${per_incident_limit}) = ${benefit}"
+ELSE:
+    benefit = amount_after_copay
+```
+
+**Step 3: Check Annual Limit Remaining**
+```sql
+-- "Used" = only claims that have been paid (finalized + auto_approve).
+-- Pending reviews, fraud investigations, and under_review claims are NOT counted
+-- as used until they are approved and finalized.
+-- (Patch 7: replaced old status IN ('finalized','under_review','fraud_investigation'))
+SELECT COALESCE(SUM(approved_amount), 0) AS used_this_year
+FROM claims
+WHERE policy_id             = :policy_id
+  AND EXTRACT(YEAR FROM incident_date) = EXTRACT(YEAR FROM :current_incident_date::date)
+  AND status                = 'finalized'
+  AND final_decision        = 'auto_approve'
+  AND approved_amount       IS NOT NULL;
+
+used_this_year = query_result  -- 0 if no approved claims yet
+remaining = annual_limit - used_this_year
+
+IF remaining <= 0:
+    REJECT with reason: "Annual limit exhausted. Limit: ${annual_limit}, Used: ${used_this_year}"
+
+IF benefit > remaining:
+    benefit = remaining
+    LOG: "Adjusted for annual limit: ${benefit} (remaining from ${annual_limit})"
+```
+
+**Step 4: Round and Return**
+```
+benefit = round(benefit, 2)
+LOG: "Final benefit amount: ${benefit}"
+```
+
+---
+
+### 3.7 Output Format
+
+**PolicyDecisionOutput:**
+```json
+{
+  "decision": "approved | rejected | ambiguous",
+  "benefit_amount": 1200.00,
+  "rejection_reason": null,
+  "rules_applied": [
+    "validation_check",
+    "coverage_category:medical_coverage",
+    "waiting_period_check",
+    "exclusion_check",
+    "benefit_calculation"
+  ],
+  "calculation_trail": [
+    "Claimed amount: $1,500.00",
+    "Applied 20% copay: $1,500.00 × 0.80 = $1,200.00",
+    "Applied per-incident limit: min($1,200.00, $5,000.00) = $1,200.00",
+    "Checked annual limit: $50,000.00 - $12,000.00 used = $38,000.00 remaining",
+    "Final benefit: $1,200.00"
+  ],
+  "policy_version": "v2.3",
+  "coverage_category": "medical_coverage",
+  "annual_limit_remaining": 36800.00
+}
+```
+
+---
+
+### 3.8 Edge Cases
+
+**Ambiguous Decision:**
+- Network requirement exists but provider not in database → AMBIGUOUS (manual review)
+- Prior authorization required but cannot verify if obtained → AMBIGUOUS
+
+**Policy Changes Mid-Year:**
+- Rules changed on June 1
+- Claim incident on May 15, submitted on June 5
+- Use rules version effective on May 15 (incident date), NOT June 5
+
+**Retroactive Claims:**
+- Policy ended Dec 31, 2023
+- Claim submitted Jan 15, 2024 for incident on Dec 1, 2023
+- VALID if within submission window (configurable, e.g., 90 days)
+
+**Missing Provider Info:**
+- If network_required = true but provider_name is null → Cannot auto-approve
+- Decision: AMBIGUOUS (manual review to verify network status)
+
+---
+
+### Validation Criteria
+
+**Test 1: Valid Claim**
+- Input: Claim within all limits
+- Expected: decision="approved", benefit calculated correctly
+- Calculation trail present
+
+**Test 2: Policy Violation**
+- Input: Incident before policy start
+- Expected: decision="rejected", specific reason given
+
+**Test 3: Exclusion**
+- Input: Description contains "cosmetic"
+- Expected: decision="rejected", reason="Excluded: cosmetic"
+
+**Test 4: Annual Limit Exhausted**
+- Setup: Policy used $49,000 of $50,000 limit
+- Input: New claim for $3,000
+- Expected: decision="approved", benefit=$1,000 (remaining)
+
+**Test 5: Ambiguous Case**
+- Input: Network required, provider unknown
+- Expected: decision="ambiguous"
+
+**Test 6: Reproducibility**
+- Process same claim twice (different times)
+- Expected: IDENTICAL outputs (same benefit, same trail)
+
+**Definition of Done:**
+- Loads correct rule version
+- Validation rules execute correctly
+- Coverage check works
+- Exclusion check works
+- Benefit calculation accurate
+- Complete calculation trail
+- All tests pass
+- Zero randomness (pure function)
+
+---
+
+## Component 4: Layer 3 - Fraud Intelligence
+
+### Goal
+Detect fraud through three cascading tiers with explainable evidence.
+
+---
+
+### 4.1 Tier 1: Rule-Based Checks
+
+**Goal:** Fast, cheap, high-precision SQL-based fraud detection.
+
+#### Check 1: Duplicate Invoice
+
+> **Day-0 patch applied:** Uses normalized column `invoice_number` directly. The original `financial->>'invoice_number'` JSON path is removed. See Day-0 Fix A.
+
+**Query:**
+```sql
+SELECT id AS claim_id, submitted_at
+FROM claims
+WHERE invoice_number = :invoice_number
+  AND id != :current_claim_id
+LIMIT 1
+```
+
+**Logic:**
+```
+IF query returns result:
+    RETURN FraudFlag(
+        flag_type="duplicate_invoice",
+        severity="high",
+        description="Invoice {invoice_number} previously used in claim {claim_id}",
+        evidence={
+            "invoice_number": invoice_number,
+            "original_claim_id": result.claim_id,
+            "original_date": result.submitted_at
         }
-        
-        category = category_map.get(claim.incident.type.value)
-        if not category or category not in policy.coverage_categories:
-            return False, f"Incident type not covered"
-        
-        category_rules = policy.coverage_categories[category]
-        if not category_rules.covered:
-            return False, f"Category not covered"
-        
-        output.rules_applied.append(f"coverage_check:{category}")
-        return True, None
-    
-    def _check_exclusions(
-        self,
-        claim: ClaimExtraction,
-        policy: PolicyRules,
-        output: PolicyDecisionOutput
-    ) -> Tuple[bool, Optional[str]]:
-        """Check exclusions"""
-        
-        category = "medical"  # Simplified
-        category_rules = policy.coverage_categories.get(category)
-        if not category_rules:
-            return False, None
-        
-        description_lower = claim.incident.description.lower()
-        for exclusion in category_rules.exclusions:
-            if exclusion.lower() in description_lower:
-                output.rules_applied.append(f"exclusion_check:{exclusion}")
-                return True, f"Excluded: {exclusion}"
-        
-        output.rules_applied.append("exclusion_check:passed")
-        return False, None
-    
-    def _calculate_benefit(
-        self,
-        claim: ClaimExtraction,
-        policy: PolicyRules,
-        output: PolicyDecisionOutput
-    ) -> float:
-        """Calculate benefit amount"""
-        
-        claimed_amount = claim.financial.claimed_amount
-        category_rules = policy.coverage_categories["medical"]
-        
-        # Apply copay
-        copay_percentage = category_rules.copay_percentage / 100
-        amount_after_copay = claimed_amount * (1 - copay_percentage)
-        
-        output.calculation_trail.append(
-            f"Applied {category_rules.copay_percentage}% copay: "
-            f"${claimed_amount} × {1-copay_percentage} = ${amount_after_copay}"
-        )
-        
-        # Apply annual limit
-        if category_rules.annual_limit:
-            benefit = min(amount_after_copay, category_rules.annual_limit)
-            output.calculation_trail.append(
-                f"Applied annual limit: min(${amount_after_copay}, ${category_rules.annual_limit})"
-            )
-        else:
-            benefit = amount_after_copay
-        
-        benefit = round(benefit, 2)
-        output.calculation_trail.append(f"Final benefit: ${benefit}")
-        output.rules_applied.append("benefit_calculation")
-        
-        return benefit
-```
-
-### Task 3.3: Add Policy Endpoint
-
-```python
-# backend/app/api/routes.py
-
-from app.layers.layer2_policy.engine import PolicyEngine
-
-@router.post("/claims/{claim_id}/evaluate-policy")
-async def evaluate_policy(
-    claim_id: str,
-    db: Session = Depends(get_db)
-):
-    """Evaluate claim against policy rules"""
-    
-    # Load claim from database
-    # claim = ...
-    
-    policy_engine = PolicyEngine(db)
-    result = await policy_engine.evaluate_claim(
-        claim=claim,
-        policy_number=claim.policy_number,
-        claim_date=claim.incident.date
     )
-    
-    return result
-```
-
-### Task 3.4: Test Policy Engine
-
-```python
-# backend/tests/test_policy_engine.py
-
-import pytest
-from app.layers.layer2_policy.engine import PolicyEngine
-
-@pytest.mark.asyncio
-async def test_policy_evaluation():
-    # Create test claim
-    # Run evaluation
-    # Assert results
-    pass
 ```
 
 ---
 
-## Phase 4: Layer 3 - Fraud Detection
+#### Check 2: Velocity Anomaly
 
-**Duration:** 6-8 hours  
-**Goal:** Implement three-tier fraud detection
-
-### Task 4.1: Create Fraud Models
-
-```python
-# backend/app/models/fraud_models.py
-
-from pydantic import BaseModel, Field
-from typing import List, Dict
-from enum import Enum
-
-class FraudFlag(BaseModel):
-    flag_type: str
-    severity: str  # 'high', 'medium', 'low'
-    description: str
-    evidence: Dict
-
-class Tier1Output(BaseModel):
-    passed: bool
-    flags: List[FraudFlag] = []
-    score: float = Field(..., ge=0.0, le=1.0)
-
-class Tier2Output(BaseModel):
-    duplicates_found: List[Dict] = []
-    max_image_similarity: float = 0.0
-    max_text_similarity: float = 0.0
-    score: float = Field(..., ge=0.0, le=1.0)
-
-class Tier3Output(BaseModel):
-    network_size: int = 0
-    risk_signals: List[Dict] = []
-    graph_patterns: List[str] = []
-    score: float = Field(..., ge=0.0, le=1.0)
-
-class FraudAnalysisOutput(BaseModel):
-    tier1: Tier1Output
-    tier2: Tier2Output
-    tier3: Tier3Output
-    combined_score: float = Field(..., ge=0.0, le=1.0)
-    risk_level: str  # 'low', 'medium', 'high'
-    recommendation: str
+**Query:**
+```sql
+SELECT COUNT(*) as claim_count
+FROM claims
+WHERE claimant_name = :claimant_name
+  AND submitted_at > NOW() - INTERVAL '7 days'
+  AND id != :current_claim_id
 ```
 
-### Task 4.2: Implement Tier 1 (Rule-Based)
-
-```python
-# backend/app/layers/layer3_fraud/tier1_rules.py
-
-from datetime import timedelta
-from app.models.fraud_models import Tier1Output, FraudFlag
-
-class Tier1Engine:
-    """Tier 1: Rule-based fraud detection"""
-    
-    def __init__(self, db):
-        self.db = db
-    
-    async def analyze(self, claim, policy_id: str) -> Tier1Output:
-        """Run all Tier 1 checks"""
-        
-        flags = []
-        
-        # Check 1: Duplicate invoice
-        if claim.financial.invoice_number:
-            dup_flag = await self._check_duplicate_invoice(
-                claim.financial.invoice_number
-            )
-            if dup_flag:
-                flags.append(dup_flag)
-        
-        # Check 2: Velocity anomaly
-        velocity_flag = await self._check_velocity(
-            claim.claimant.name,
-            claim.incident.date
-        )
-        if velocity_flag:
-            flags.append(velocity_flag)
-        
-        # Check 3: Amount anomaly
-        amount_flag = await self._check_amount_anomaly(
-            claim.financial.claimed_amount,
-            claim.incident.type.value
-        )
-        if amount_flag:
-            flags.append(amount_flag)
-        
-        # Calculate score
-        score = self._calculate_score(flags)
-        
-        return Tier1Output(
-            passed=len(flags) == 0,
-            flags=flags,
-            score=score
-        )
-    
-    async def _check_duplicate_invoice(self, invoice_number: str):
-        """Check for duplicate invoice"""
-        # Query database
-        # If exists, return flag
-        return None
-    
-    async def _check_velocity(self, claimant_id: str, claim_date):
-        """Check velocity"""
-        # Query recent claims
-        # If >5 in 7 days, return flag
-        return None
-    
-    async def _check_amount_anomaly(self, amount: float, incident_type: str):
-        """Check if amount is statistical outlier"""
-        # Get statistics
-        # If > mean + 3*stddev, return flag
-        return None
-    
-    def _calculate_score(self, flags: List[FraudFlag]) -> float:
-        """Calculate fraud score from flags"""
-        if not flags:
-            return 0.0
-        
-        severity_weights = {'high': 0.8, 'medium': 0.5, 'low': 0.2}
-        total = sum(severity_weights.get(f.severity, 0.5) for f in flags)
-        max_possible = len(flags) * 0.8
-        
-        return min(total / max_possible, 1.0) if max_possible > 0 else 0.0
+**Logic:**
 ```
+threshold = config.get("fraud.tier1.velocity_threshold", default=5)
 
-### Task 4.3: Implement Tier 2 (Vector Similarity)
-
-```python
-# backend/app/layers/layer3_fraud/tier2_vectors.py
-
-from typing import List, Dict
-import cohere
-import requests
-from app.models.fraud_models import Tier2Output
-from app.config import settings
-from app.database import qdrant_client
-
-class Tier2Engine:
-    """Tier 2: Vector similarity detection"""
-    
-    def __init__(self):
-        self.cohere_client = cohere.Client(settings.COHERE_API_KEY)
-        self.jina_api_key = settings.JINA_API_KEY
-    
-    async def analyze(self, claim, claim_images: List[bytes]) -> Tier2Output:
-        """Analyze for vector similarity"""
-        
-        duplicates = []
-        max_image_sim = 0.0
-        max_text_sim = 0.0
-        
-        # Check image similarity
-        if claim_images:
-            image_results = await self._check_image_similarity(claim_images)
-            duplicates.extend(image_results)
-            if image_results:
-                max_image_sim = max(r['similarity'] for r in image_results)
-        
-        # Check text similarity
-        text_results = await self._check_text_similarity(
-            claim.incident.description
-        )
-        duplicates.extend(text_results)
-        if text_results:
-            max_text_sim = max(r['similarity'] for r in text_results)
-        
-        # Calculate score
-        score = self._calculate_score(max_image_sim, max_text_sim)
-        
-        # Store embeddings
-        await self._store_embeddings(claim, claim_images)
-        
-        return Tier2Output(
-            duplicates_found=duplicates,
-            max_image_similarity=max_image_sim,
-            max_text_similarity=max_text_sim,
-            score=score
-        )
-    
-    async def _check_image_similarity(self, images: List[bytes]) -> List[Dict]:
-        """Check image similarity using Jina AI"""
-        
-        results = []
-        
-        for image_bytes in images:
-            # Generate embedding via Jina API
-            embedding = await self._generate_jina_embedding(image_bytes)
-            
-            # Search in Qdrant
-            search_results = qdrant_client.search(
-                collection_name="claim_images",
-                query_vector=embedding,
-                limit=5,
-                score_threshold=0.90
-            )
-            
-            for hit in search_results:
-                if hit.score > 0.95:
-                    results.append({
-                        'type': 'image',
-                        'similarity': hit.score,
-                        'original_claim_id': hit.payload['claim_id']
-                    })
-        
-        return results
-    
-    async def _check_text_similarity(self, description: str) -> List[Dict]:
-        """Check text similarity using Cohere"""
-        
-        # Generate embedding
-        embedding = await self._generate_cohere_embedding(description)
-        
-        # Search in Qdrant
-        search_results = qdrant_client.search(
-            collection_name="claim_texts",
-            query_vector=embedding,
-            limit=5,
-            score_threshold=0.85
-        )
-        
-        results = []
-        for hit in search_results:
-            if hit.score > 0.90:
-                results.append({
-                    'type': 'text',
-                    'similarity': hit.score,
-                    'original_claim_id': hit.payload['claim_id']
-                })
-        
-        return results
-    
-    async def _generate_jina_embedding(self, image_bytes: bytes) -> List[float]:
-        """Generate image embedding via Jina AI"""
-        
-        import base64
-        image_b64 = base64.b64encode(image_bytes).decode()
-        
-        response = requests.post(
-            'https://api.jina.ai/v1/embeddings',
-            headers={
-                'Authorization': f'Bearer {self.jina_api_key}',
-                'Content-Type': 'application/json'
-            },
-            json={
-                'input': [{'image': image_b64}],
-                'model': 'jina-clip-v1'
-            }
-        )
-        
-        return response.json()['data'][0]['embedding']
-    
-    async def _generate_cohere_embedding(self, text: str) -> List[float]:
-        """Generate text embedding via Cohere"""
-        
-        response = self.cohere_client.embed(
-            texts=[text],
-            model='embed-english-v3.0',
-            input_type='search_query'
-        )
-        
-        return response.embeddings[0]
-    
-    async def _store_embeddings(self, claim, images: List[bytes]):
-        """Store embeddings for future comparisons"""
-        
-        from qdrant_client.models import PointStruct
-        
-        claim_id = claim.policy_number  # Temp ID
-        
-        # Store image embeddings
-        for idx, image_bytes in enumerate(images):
-            embedding = await self._generate_jina_embedding(image_bytes)
-            
-            qdrant_client.upsert(
-                collection_name="claim_images",
-                points=[
-                    PointStruct(
-                        id=hash(f"{claim_id}_{idx}") % (10 ** 8),
-                        vector=embedding,
-                        payload={"claim_id": claim_id}
-                    )
-                ]
-            )
-        
-        # Store text embedding
-        text_embedding = await self._generate_cohere_embedding(
-            claim.incident.description
-        )
-        
-        qdrant_client.upsert(
-            collection_name="claim_texts",
-            points=[
-                PointStruct(
-                    id=hash(claim_id) % (10 ** 8),
-                    vector=text_embedding,
-                    payload={"claim_id": claim_id}
-                )
-            ]
-        )
-    
-    def _calculate_score(self, max_image_sim: float, max_text_sim: float) -> float:
-        """Calculate tier 2 score"""
-        return (0.6 * max_image_sim) + (0.4 * max_text_sim)
-```
-
-### Task 4.4: Implement Tier 3 (Graph Analytics)
-
-```python
-# backend/app/layers/layer3_fraud/tier3_graph.py
-
-from app.models.fraud_models import Tier3Output
-from app.database import neo4j_driver
-
-class Tier3Engine:
-    """Tier 3: Graph-based network fraud detection"""
-    
-    def __init__(self):
-        self.driver = neo4j_driver
-    
-    async def analyze(self, claim) -> Tier3Output:
-        """Analyze for network fraud patterns"""
-        
-        # Add claim to graph
-        await self._add_to_graph(claim)
-        
-        # Run detection queries
-        risk_signals = []
-        
-        # Query 1: Provider velocity
-        provider_risk = await self._check_provider_velocity(
-            claim.financial.provider_name
-        )
-        if provider_risk:
-            risk_signals.append(provider_risk)
-        
-        # Query 2: Shared contacts
-        contact_risk = await self._check_shared_contacts(
-            claim.claimant.contact_phone
-        )
-        if contact_risk:
-            risk_signals.append(contact_risk)
-        
-        # Get network size
-        network_size = await self._get_network_size(claim.claimant.name)
-        
-        # Calculate score
-        score = self._calculate_score(risk_signals, network_size)
-        
-        patterns = [s['pattern'] for s in risk_signals]
-        
-        return Tier3Output(
-            network_size=network_size,
-            risk_signals=risk_signals,
-            graph_patterns=patterns,
-            score=score
-        )
-    
-    async def _add_to_graph(self, claim):
-        """Add claim to Neo4j graph"""
-        
-        with self.driver.session() as session:
-            query = """
-            MERGE (claim:Claim {id: $claim_id})
-            SET claim.amount = $amount,
-                claim.date = date($date)
-            
-            MERGE (person:Person {name: $person_name})
-            MERGE (person)-[:FILED]->(claim)
-            
-            WITH claim
-            FOREACH (provider IN CASE WHEN $provider_name IS NOT NULL 
-                    THEN [$provider_name] ELSE [] END |
-                MERGE (p:Provider {name: provider})
-                MERGE (claim)-[:TREATED_BY]->(p)
-            )
-            
-            WITH claim
-            FOREACH (phone IN CASE WHEN $phone IS NOT NULL 
-                    THEN [$phone] ELSE [] END |
-                MERGE (c:Contact {value: phone, type: 'phone'})
-                MERGE (person)-[:HAS_CONTACT]->(c)
-            )
-            """
-            
-            session.run(
-                query,
-                claim_id=claim.policy_number,
-                amount=float(claim.financial.claimed_amount),
-                date=str(claim.incident.date),
-                person_name=claim.claimant.name,
-                provider_name=claim.financial.provider_name,
-                phone=claim.claimant.contact_phone
-            )
-    
-    async def _check_provider_velocity(self, provider_name: str):
-        """Check for high-velocity provider"""
-        
-        if not provider_name:
-            return None
-        
-        with self.driver.session() as session:
-            query = """
-            MATCH (provider:Provider {name: $provider_name})<-[:TREATED_BY]-(claim:Claim)
-            WHERE claim.date > date() - duration('P7D')
-            RETURN count(claim) as claim_count
-            """
-            
-            result = session.run(query, provider_name=provider_name)
-            record = result.single()
-            
-            if record and record['claim_count'] > 10:
-                return {
-                    'pattern': 'high_velocity_provider',
-                    'severity': 'high',
-                    'description': f"Provider linked to {record['claim_count']} claims in 7 days",
-                    'risk_score': 0.8
-                }
-        
-        return None
-    
-    async def _check_shared_contacts(self, phone: str):
-        """Check for shared contacts"""
-        
-        if not phone:
-            return None
-        
-        with self.driver.session() as session:
-            query = """
-            MATCH (person:Person)-[:HAS_CONTACT]->(contact:Contact {value: $phone})
-            RETURN count(DISTINCT person) as person_count
-            """
-            
-            result = session.run(query, phone=phone)
-            record = result.single()
-            
-            if record and record['person_count'] > 3:
-                return {
-                    'pattern': 'shared_contact',
-                    'severity': 'medium',
-                    'description': f"Phone shared by {record['person_count']} claimants",
-                    'risk_score': 0.7
-                }
-        
-        return None
-    
-    async def _get_network_size(self, person_name: str) -> int:
-        """Get network size"""
-        
-        with self.driver.session() as session:
-            query = """
-            MATCH (person:Person {name: $person_name})-[:HAS_CONTACT|FILED*1..2]-(connected)
-            RETURN count(DISTINCT connected) as network_size
-            """
-            
-            result = session.run(query, person_name=person_name)
-            record = result.single()
-            
-            return record['network_size'] if record else 0
-    
-    def _calculate_score(self, risk_signals: List[Dict], network_size: int) -> float:
-        """Calculate tier 3 score"""
-        
-        if not risk_signals:
-            return 0.3 if network_size > 10 else 0.0
-        
-        total_risk = sum(s['risk_score'] for s in risk_signals)
-        score = min(total_risk / len(risk_signals), 1.0)
-        
-        if network_size > 10:
-            score = min(score * 1.2, 1.0)
-        
-        return score
-```
-
-### Task 4.5: Implement Fusion Engine
-
-```python
-# backend/app/layers/layer3_fraud/fusion.py
-
-from app.models.fraud_models import FraudAnalysisOutput
-
-class FusionEngine:
-    """Combine fraud signals from all tiers"""
-    
-    def fuse(self, tier1, tier2, tier3) -> FraudAnalysisOutput:
-        """Fuse all tier scores"""
-        
-        # Weighted combination
-        combined_score = (
-            0.3 * tier1.score +
-            0.3 * tier2.score +
-            0.4 * tier3.score
-        )
-        
-        # Determine risk level
-        if combined_score < 0.3:
-            risk_level = "low"
-            recommendation = "proceed"
-        elif combined_score < 0.7:
-            risk_level = "medium"
-            recommendation = "review"
-        else:
-            risk_level = "high"
-            recommendation = "investigate"
-        
-        return FraudAnalysisOutput(
-            tier1=tier1,
-            tier2=tier2,
-            tier3=tier3,
-            combined_score=combined_score,
-            risk_level=risk_level,
-            recommendation=recommendation
-        )
-```
-
-### Task 4.6: Main Fraud Engine
-
-```python
-# backend/app/layers/layer3_fraud/engine.py
-
-from app.layers.layer3_fraud.tier1_rules import Tier1Engine
-from app.layers.layer3_fraud.tier2_vectors import Tier2Engine
-from app.layers.layer3_fraud.tier3_graph import Tier3Engine
-from app.layers.layer3_fraud.fusion import FusionEngine
-
-class FraudEngine:
-    """Complete fraud detection pipeline"""
-    
-    def __init__(self, db):
-        self.tier1 = Tier1Engine(db)
-        self.tier2 = Tier2Engine()
-        self.tier3 = Tier3Engine()
-        self.fusion = FusionEngine()
-    
-    async def analyze(self, claim, claim_images, policy_id):
-        """Run complete fraud analysis"""
-        
-        import asyncio
-        
-        # Run all tiers in parallel
-        tier1_result, tier2_result, tier3_result = await asyncio.gather(
-            self.tier1.analyze(claim, policy_id),
-            self.tier2.analyze(claim, claim_images),
-            self.tier3.analyze(claim)
-        )
-        
-        # Fuse results
-        final_analysis = self.fusion.fuse(tier1_result, tier2_result, tier3_result)
-        
-        return final_analysis
-```
-
----
-
-## Phase 5: Layer 4 - Decision Engine
-
-**Duration:** 2-3 hours  
-**Goal:** Implement economic decision routing
-
-### Task 5.1: Create Decision Models
-
-```python
-# backend/app/models/decision_models.py
-
-from pydantic import BaseModel
-from typing import List, Optional
-from enum import Enum
-
-class DecisionType(str, Enum):
-    AUTO_APPROVE = "auto_approve"
-    AUTO_REJECT = "auto_reject"
-    MANUAL_REVIEW = "manual_review"
-    FRAUD_INVESTIGATION = "fraud_investigation"
-
-class DecisionOutput(BaseModel):
-    decision: DecisionType
-    expected_loss: float
-    investigation_cost: float = 150.0
-    benefit_amount: Optional[float] = None
-    rationale: str
-    confidence_level: str
-    next_steps: List[str] = []
-```
-
-### Task 5.2: Implement Decision Engine
-
-```python
-# backend/app/layers/layer4_decision/engine.py
-
-from app.models.decision_models import DecisionOutput, DecisionType
-
-class DecisionEngine:
-    """Layer 4: Economic decision routing"""
-    
-    INVESTIGATION_COST = 150.0
-    
-    async def make_decision(self, extraction, policy_decision, fraud_analysis):
-        """Make final routing decision"""
-        
-        # Step 1: Check data quality
-        if extraction.extraction_metadata.overall_confidence < 0.85:
-            return DecisionOutput(
-                decision=DecisionType.MANUAL_REVIEW,
-                expected_loss=0.0,
-                rationale="Low extraction confidence",
-                confidence_level="low",
-                next_steps=["Human verification required"]
-            )
-        
-        # Step 2: Check policy
-        if policy_decision.decision == "rejected":
-            return DecisionOutput(
-                decision=DecisionType.AUTO_REJECT,
-                expected_loss=0.0,
-                rationale=f"Policy violation: {policy_decision.rejection_reason}",
-                confidence_level="high",
-                next_steps=["Send rejection notice"]
-            )
-        
-        # Step 3: Check fraud
-        fraud_score = fraud_analysis.combined_score
-        
-        if fraud_score > 0.7:
-            expected_loss = fraud_score * extraction.financial.claimed_amount
-            return DecisionOutput(
-                decision=DecisionType.FRAUD_INVESTIGATION,
-                expected_loss=expected_loss,
-                rationale=f"High fraud score ({fraud_score:.2f})",
-                confidence_level="high",
-                next_steps=["Escalate to SIU"]
-            )
-        
-        # Step 4: Economic decision
-        expected_loss = fraud_score * extraction.financial.claimed_amount
-        
-        if expected_loss > self.INVESTIGATION_COST:
-            return DecisionOutput(
-                decision=DecisionType.MANUAL_REVIEW,
-                expected_loss=expected_loss,
-                benefit_amount=policy_decision.benefit_amount,
-                rationale=f"Expected loss (${expected_loss:.2f}) exceeds investigation cost",
-                confidence_level="medium",
-                next_steps=["Underwriter review"]
-            )
-        
-        # Step 5: Low risk - auto-approve
-        if fraud_score < 0.2 and extraction.extraction_metadata.overall_confidence > 0.9:
-            return DecisionOutput(
-                decision=DecisionType.AUTO_APPROVE,
-                expected_loss=expected_loss,
-                benefit_amount=policy_decision.benefit_amount,
-                rationale=f"Low fraud risk, high confidence",
-                confidence_level="high",
-                next_steps=["Process payment"]
-            )
-        
-        # Default: manual review
-        return DecisionOutput(
-            decision=DecisionType.MANUAL_REVIEW,
-            expected_loss=expected_loss,
-            benefit_amount=policy_decision.benefit_amount,
-            rationale="Moderate confidence or fraud indicators",
-            confidence_level="medium",
-            next_steps=["Manual review recommended"]
-        )
-```
-
----
-
-## Phase 6: Layer 5 - Audit & Learning
-
-**Duration:** 2-3 hours  
-**Goal:** Implement audit logging and feedback collection
-
-### Task 6.1: Create Audit Logger
-
-```python
-# backend/app/layers/layer5_audit/logger.py
-
-from sqlalchemy.orm import Session
-from datetime import datetime
-import json
-
-class AuditLogger:
-    """Layer 5: Complete audit trail logging"""
-    
-    def __init__(self, db: Session):
-        self.db = db
-    
-    async def log_claim_processing(
-        self,
-        claim_id: str,
-        extraction,
-        policy_decision,
-        fraud_analysis,
-        final_decision,
-        processing_time_ms: int
-    ):
-        """Log complete processing trail"""
-        
-        audit_record = {
-            'claim_id': claim_id,
-            'layer_1_output': {
-                'confidence': extraction.extraction_metadata.overall_confidence,
-                'warnings': extraction.extraction_metadata.warnings,
-                'model': extraction.extraction_metadata.model_used
-            },
-            'layer_2_output': {
-                'policy_version': policy_decision.policy_version,
-                'decision': policy_decision.decision.value,
-                'benefit_amount': policy_decision.benefit_amount,
-                'rules_applied': policy_decision.rules_applied
-            },
-            'layer_3_output': {
-                'tier1_score': fraud_analysis.tier1.score,
-                'tier2_score': fraud_analysis.tier2.score,
-                'tier3_score': fraud_analysis.tier3.score,
-                'combined_score': fraud_analysis.combined_score,
-                'risk_level': fraud_analysis.risk_level
-            },
-            'layer_4_output': {
-                'decision': final_decision.decision.value,
-                'expected_loss': final_decision.expected_loss,
-                'rationale': final_decision.rationale
-            },
-            'processing_time_ms': processing_time_ms,
-            'timestamp': datetime.utcnow().isoformat()
+IF claim_count > threshold:
+    RETURN FraudFlag(
+        flag_type="velocity_anomaly",
+        severity="high",
+        description="{claimant_name} submitted {claim_count} claims in 7 days",
+        evidence={
+            "claimant_name": claimant_name,
+            "claim_count": claim_count,
+            "threshold": threshold
         }
-        
-        # Insert into audit_logs table
-        # SQL: INSERT INTO audit_logs ...
-        
-        print(f"Audit log created for claim {claim_id}")
-```
-
-### Task 6.2: Create Feedback Collector
-
-```python
-# backend/app/layers/layer5_audit/feedback.py
-
-class FeedbackCollector:
-    """Collect underwriter feedback for active learning"""
-    
-    def __init__(self, db):
-        self.db = db
-    
-    async def record_feedback(
-        self,
-        claim_id: str,
-        reviewed_by_user_id: str,
-        system_decision: str,
-        human_decision: str,
-        feedback_notes: str = None
-    ):
-        """Record human review feedback"""
-        
-        feedback_record = {
-            'claim_id': claim_id,
-            'reviewed_by': reviewed_by_user_id,
-            'system_decision': system_decision,
-            'human_decision': human_decision,
-            'disagreement': system_decision != human_decision,
-            'feedback_notes': feedback_notes
-        }
-        
-        # Insert into feedback table
-        # SQL: INSERT INTO feedback ...
-        
-        print(f"Feedback recorded for claim {claim_id}")
-```
-
-### Task 6.3: Create Retraining Script
-
-```python
-# backend/scripts/retrain_model.py
-
-from sklearn.linear_model import LogisticRegression
-import pandas as pd
-from app.database import SessionLocal
-
-def retrain_fraud_model():
-    """Retrain fraud fusion weights"""
-    
-    db = SessionLocal()
-    
-    # Load feedback data
-    # SQL: SELECT * FROM feedback WHERE disagreement = TRUE
-    feedback_data = []  # Load from DB
-    
-    if len(feedback_data) < 100:
-        print("Not enough feedback data for retraining")
-        return
-    
-    # Prepare training data
-    df = pd.DataFrame(feedback_data)
-    X = df[['tier1_score', 'tier2_score', 'tier3_score']]
-    y = df['human_decision_binary']  # 0 = approve, 1 = reject
-    
-    # Train model
-    model = LogisticRegression()
-    model.fit(X, y)
-    
-    # Extract new weights
-    new_weights = model.coef_[0]
-    
-    # Save to config
-    print(f"New weights: {new_weights}")
-    print("Retraining complete!")
-    
-    db.close()
-
-if __name__ == "__main__":
-    retrain_fraud_model()
+    )
 ```
 
 ---
 
-## Phase 7: Frontend Implementation
+#### Check 3: Amount Anomaly (Statistical Outlier)
 
-**Duration:** 8-10 hours  
-**Goal:** Build complete Next.js frontend
+> **Day-0 patch applied:** Uses normalized column `incident_type` directly. The original `incident->>'type'` JSON path is removed. Uses canonical status values. See Day-0 Fix A, D.
 
-### Task 7.1: Create Type Definitions
-
-```typescript
-// frontend/src/types/index.ts
-
-export interface Claim {
-  id: string;
-  claim_number: string;
-  claimant_name: string;
-  policy_number: string;
-  incident_date: string;
-  claimed_amount: number;
-  approved_amount?: number;
-  status: 'submitted' | 'processing' | 'approved' | 'rejected' | 'under_review';
-  decision?: 'auto_approve' | 'auto_reject' | 'manual_review' | 'fraud_investigation';
-  fraud_score?: number;
-  confidence?: number;
-  created_at: string;
-}
-
-export interface ClaimDecision {
-  decision: string;
-  expected_loss: number;
-  benefit_amount?: number;
-  rationale: string;
-  confidence_level: string;
-  next_steps: string[];
-}
-
-export interface FraudAnalysis {
-  tier1_score: number;
-  tier2_score: number;
-  tier3_score: number;
-  combined_score: number;
-  risk_level: string;
-}
+**Query:**
+```sql
+SELECT 
+    AVG(claimed_amount) as mean,
+    STDDEV(claimed_amount) as stddev,
+    COUNT(*) as sample_count
+FROM claims
+WHERE incident_type = :incident_type
+  AND status IN ('finalized', 'under_review', 'fraud_investigation')
+  AND claimed_amount IS NOT NULL
 ```
 
-### Task 7.2: Create Upload Component
+**Logic:**
+```
+IF result.count < 30:
+    SKIP (insufficient data for statistics)
 
-```typescript
-// frontend/src/components/ClaimUpload.tsx
+threshold = mean + (3 * stddev)
 
-'use client';
-
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, FileText, Image, Video, Music } from 'lucide-react';
-import { claimsApi } from '@/lib/api';
-
-export default function ClaimUpload() {
-  const [files, setFiles] = useState<File[]>([]);
-  const [policyNumber, setPolicyNumber] = useState('');
-  const [processing, setProcessing] = useState(false);
-  const [result, setResult] = useState<any>(null);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles(Array.from(e.target.files));
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (files.length === 0) {
-      alert('Please upload at least one file');
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      const decision = await claimsApi.submitClaim({
-        files,
-        policyNumber: policyNumber || undefined
-      });
-      setResult(decision);
-    } catch (error) {
-      console.error('Error processing claim:', error);
-      alert('Error processing claim');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const getFileIcon = (type: string) => {
-    if (type.includes('pdf')) return <FileText className="w-4 h-4" />;
-    if (type.includes('image')) return <Image className="w-4 h-4" />;
-    if (type.includes('video')) return <Video className="w-4 h-4" />;
-    if (type.includes('audio')) return <Music className="w-4 h-4" />;
-    return <FileText className="w-4 h-4" />;
-  };
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Submit Insurance Claim</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="policy-number">Policy Number (Optional)</Label>
-            <Input
-              id="policy-number"
-              placeholder="P-2024-001"
-              value={policyNumber}
-              onChange={(e) => setPolicyNumber(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="file-upload">Upload Documents</Label>
-            <Input
-              id="file-upload"
-              type="file"
-              multiple
-              accept=".pdf,.png,.jpg,.jpeg,.mp4,.mp3,.wav"
-              onChange={handleFileChange}
-            />
-            <p className="text-sm text-gray-500 mt-1">
-              Supported: PDF, Images, Videos, Audio
-            </p>
-          </div>
-
-          {files.length > 0 && (
-            <div className="space-y-2">
-              <Label>Selected Files:</Label>
-              {files.map((file, idx) => (
-                <div key={idx} className="flex items-center gap-2 text-sm">
-                  {getFileIcon(file.type)}
-                  <span>{file.name}</span>
-                  <span className="text-gray-500">
-                    ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <Button
-            onClick={handleSubmit}
-            disabled={processing || files.length === 0}
-            className="w-full"
-          >
-            {processing ? (
-              <>
-                <span className="animate-spin mr-2">⏳</span>
-                Processing...
-              </>
-            ) : (
-              <>
-                <Upload className="w-4 h-4 mr-2" />
-                Submit Claim
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {result && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Processing Result</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label>Decision</Label>
-              <div className={`text-lg font-semibold ${
-                result.decision === 'auto_approve' ? 'text-green-600' :
-                result.decision === 'auto_reject' ? 'text-red-600' :
-                result.decision === 'fraud_investigation' ? 'text-red-700' :
-                'text-yellow-600'
-              }`}>
-                {result.decision.replace('_', ' ').toUpperCase()}
-              </div>
-            </div>
-
-            <div>
-              <Label>Rationale</Label>
-              <p className="text-sm">{result.rationale}</p>
-            </div>
-
-            {result.benefit_amount && (
-              <div>
-                <Label>Benefit Amount</Label>
-                <p className="text-xl font-bold">${result.benefit_amount.toFixed(2)}</p>
-              </div>
-            )}
-
-            <div>
-              <Label>Next Steps</Label>
-              <ul className="list-disc list-inside text-sm space-y-1">
-                {result.next_steps.map((step: string, idx: number) => (
-                  <li key={idx}>{step}</li>
-                ))}
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-}
+IF claimed_amount > threshold:
+    z_score = (claimed_amount - mean) / stddev
+    RETURN FraudFlag(
+        flag_type="amount_anomaly",
+        severity="medium",
+        description="Amount ${claimed_amount} is {z_score:.1f} std devs above mean",
+        evidence={
+            "claimed_amount": claimed_amount,
+            "mean": mean,
+            "stddev": stddev,
+            "z_score": z_score
+        }
+    )
 ```
 
-### Task 7.3: Create Dashboard Component
+---
 
-```typescript
-// frontend/src/components/ClaimDashboard.tsx
+#### Tier 1 Score Calculation
 
-'use client';
+**Logic:**
+```
+IF no flags:
+    score = 0.0
+ELSE:
+    severity_weights = {"high": 0.8, "medium": 0.5, "low": 0.2}
+    flag_scores = [severity_weights[flag.severity] for flag in flags]
+    score = max(flag_scores)  # Use highest, don't add
+```
 
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { claimsApi } from '@/lib/api';
-import { Claim } from '@/types';
+**Why max not sum:** Multiple flags may indicate same underlying fraud. Don't double-count.
 
-export default function ClaimDashboard() {
-  const [claims, setClaims] = useState<Claim[]>([]);
-  const [loading, setLoading] = useState(true);
+---
 
-  useEffect(() => {
-    loadClaims();
-  }, []);
+### 4.2 Tier 2: Vector Similarity
 
-  const loadClaims = async () => {
-    try {
-      const data = await claimsApi.getAllClaims();
-      setClaims(data);
-    } catch (error) {
-      console.error('Error loading claims:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+**Goal:** Detect reused content via embeddings.
 
-  const getStatusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      'approved': 'bg-green-500',
-      'rejected': 'bg-red-500',
-      'processing': 'bg-blue-500',
-      'under_review': 'bg-yellow-500',
-      'submitted': 'bg-gray-500',
-    };
-    return <Badge className={colors[status] || 'bg-gray-500'}>{status}</Badge>;
-  };
+#### Image Similarity
 
-  if (loading) {
-    return <div className="text-center py-8">Loading claims...</div>;
+**Process:**
+```
+1. For each image in claim:
+   a. Convert to base64
+   b. Call Jina AI API:
+      POST https://api.jina.ai/v1/embeddings
+      Headers: Authorization: Bearer {JINA_API_KEY}
+      Body: {
+        "input": [{"image": base64_image}],
+        "model": "jina-clip-v1"
+      }
+      Timeout: 30 seconds
+   
+   c. Extract embedding (512-dim vector)
+   
+   d. Search Qdrant:
+      collection: "claim_images"
+      query_vector: embedding
+      limit: 5
+      score_threshold: config.get("fraud.tier2.image_similarity_threshold", 0.95)
+   
+   e. For each result with score > threshold:
+      - Verify it's not same claim (compare claim_ids)
+      - If different claim → Add to duplicates list
+```
+
+**Error Handling:**
+```
+IF Jina API timeout:
+    Log error
+    Retry once
+    If still fails → Set image_similarity = 0.0 (don't penalize for infra issues)
+
+IF Jina API rate limit (429):
+    Exponential backoff (1s, 2s, 4s)
+    Max 5 retries
+    If exhausted → Queue for later, return temp score = 0.0
+
+IF Jina API auth error (401):
+    Alert admin
+    Block further processing (critical failure)
+```
+
+---
+
+#### Text Similarity
+
+**Process:**
+```
+1. Extract incident_description from claim
+
+2. Call Cohere API:
+   POST https://api.cohere.ai/v1/embed
+   Headers: Authorization: Bearer {COHERE_API_KEY}
+   Body: {
+     "texts": [incident_description],
+     "model": "embed-english-v3.0",
+     "input_type": "search_query"
+   }
+   Timeout: 30 seconds
+
+3. Extract embedding (1024-dim vector)
+
+4. Search Qdrant:
+   collection: "claim_texts"
+   query_vector: embedding
+   limit: 5
+   score_threshold: config.get("fraud.tier2.text_similarity_threshold", 0.90)
+
+5. For each result with score > threshold:
+   - Verify different claim
+   - Add to duplicates list
+```
+
+**Same error handling as image similarity.**
+
+---
+
+#### Embedding Storage
+
+> **Day-0 patch applied:** Point IDs are stable UUIDs derived via UUID5 (namespace + deterministic seed), not raw hashes. Payloads store `claim_id` (UUID) as the sole claim reference — no `policy_number`. See Day-0 Fix B.
+
+**After Analysis (even if claim rejected):**
+```
+Store in Qdrant:
+
+For images:
+  collection: "claim_images"
+  id: uuid5(NAMESPACE_URL, f"{claim_id}:image:{image_index}")
+      -- UUID5 is deterministic and collision-resistant; safe to recompute on retry
+  vector: embedding
+  payload: {
+    "claim_id": claim_id,          -- UUID only; never policy_number
+    "document_id": document_id,    -- UUID of the claim_documents row
+    "image_index": image_index,    -- position within this claim's images
+    "image_hash": sha256(image_bytes),
+    "uploaded_at": timestamp
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Recent Claims</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Claim #</TableHead>
-              <TableHead>Claimant</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Fraud Score</TableHead>
-              <TableHead>Date</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {claims.map((claim) => (
-              <TableRow key={claim.id}>
-                <TableCell className="font-medium">{claim.claim_number}</TableCell>
-                <TableCell>{claim.claimant_name}</TableCell>
-                <TableCell>${claim.claimed_amount.toLocaleString()}</TableCell>
-                <TableCell>{getStatusBadge(claim.status)}</TableCell>
-                <TableCell>
-                  {claim.fraud_score !== undefined ? (
-                    <span className={
-                      claim.fraud_score > 0.7 ? 'text-red-600' :
-                      claim.fraud_score > 0.3 ? 'text-yellow-600' :
-                      'text-green-600'
-                    }>
-                      {(claim.fraud_score * 100).toFixed(0)}%
-                    </span>
-                  ) : '-'}
-                </TableCell>
-                <TableCell>
-                  {new Date(claim.created_at).toLocaleDateString()}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
+For text:
+  collection: "claim_texts"
+  id: uuid5(NAMESPACE_URL, f"{claim_id}:text")
+      -- One text embedding per claim; UUID5 guarantees idempotent upsert
+  vector: embedding
+  payload: {
+    "claim_id": claim_id,          -- UUID only; never policy_number
+    "text_snippet": description[:500],
+    "incident_type": incident_type,
+    "uploaded_at": timestamp
+  }
 ```
 
-### Task 7.4: Create Main Page
+**Why UUID5 over raw hash:**
+- UUID5 output is a valid UUID (128-bit, formatted correctly for Qdrant's UUID point ID type)
+- Deterministic: same inputs always produce the same UUID — retries safely overwrite the same point
+- No truncation or encoding ambiguity that raw `sha256[:16]` byte-slicing can introduce
+- Standard library available in Python (`uuid.uuid5`), Node.js (`uuid` package), and Go (`github.com/google/uuid`)
 
-```typescript
-// frontend/src/app/page.tsx
+---
 
-import ClaimUpload from '@/components/ClaimUpload';
-import ClaimDashboard from '@/components/ClaimDashboard';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+#### Tier 2 Score Calculation
 
-export default function Home() {
-  return (
-    <main className="container mx-auto py-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2">Lexora</h1>
-        <p className="text-gray-600">AI-Powered Claims Intelligence Platform</p>
-      </div>
+**Logic:**
+```
+max_image_sim = max([d['similarity'] for d in duplicates if d['type']=='image'], default=0.0)
+max_text_sim = max([d['similarity'] for d in duplicates if d['type']=='text'], default=0.0)
 
-      <Tabs defaultValue="upload" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="upload">Submit Claim</TabsTrigger>
-          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="upload">
-          <ClaimUpload />
-        </TabsContent>
-
-        <TabsContent value="dashboard">
-          <ClaimDashboard />
-        </TabsContent>
-      </Tabs>
-    </main>
-  );
-}
+score = (0.6 * max_image_sim) + (0.4 * max_text_sim)
 ```
 
-### Task 7.5: Create Fraud Network Visualization
+---
 
-```typescript
-// frontend/src/components/FraudNetwork.tsx
+### 4.3 Tier 3: Graph Network Analysis
 
-'use client';
+**Goal:** Detect fraud rings through relationship patterns.
 
-import { useEffect, useState } from 'react';
-import ReactFlow, { Node, Edge } from 'react-flow-renderer';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+#### Graph Node Creation
 
-export default function FraudNetwork({ claimId }: { claimId: string }) {
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+> **Day-0 patch applied:** `Claim` nodes merge on `{id: $claim_id}` (UUID) only — never `policy_number`. Uniqueness constraints defined explicitly. See Day-0 Fix B.
 
-  useEffect(() => {
-    // Fetch fraud network data from API
-    // Transform into React Flow format
-    
-    // Example mock data
-    setNodes([
-      { id: '1', data: { label: 'Claim #1234' }, position: { x: 250, y: 0 } },
-      { id: '2', data: { label: 'Provider A' }, position: { x: 100, y: 100 } },
-      { id: '3', data: { label: 'Claimant B' }, position: { x: 400, y: 100 } },
-    ]);
+**One-time setup — run before any data is written:**
+```cypher
+// Uniqueness constraints (also create indexes automatically in Neo4j 4+)
+CREATE CONSTRAINT claim_id_unique  IF NOT EXISTS FOR (c:Claim)    REQUIRE c.id IS UNIQUE;
+CREATE CONSTRAINT person_id_unique IF NOT EXISTS FOR (p:Person)   REQUIRE p.id IS UNIQUE;
+CREATE CONSTRAINT provider_name_unique IF NOT EXISTS FOR (p:Provider) REQUIRE p.name IS UNIQUE;
+CREATE CONSTRAINT contact_value_unique IF NOT EXISTS FOR (c:Contact)  REQUIRE c.value IS UNIQUE;
+```
 
-    setEdges([
-      { id: 'e1-2', source: '1', target: '2', label: 'treated_by' },
-      { id: 'e1-3', source: '1', target: '3', label: 'filed_by' },
-    ]);
-  }, [claimId]);
+**When claim processed, add to Neo4j:**
+```cypher
+// Create Claim node — id is claims.id (UUID), never policy_number
+MERGE (claim:Claim {id: $claim_id})
+SET claim.claim_number = $claim_number,
+    claim.amount       = $claimed_amount,
+    claim.date         = date($incident_date)
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Fraud Network Analysis</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div style={{ height: 400 }}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            fitView
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
+// Create Person node — id is a generated UUID per unique claimant, never name string
+MERGE (person:Person {id: $person_id})
+SET person.name = $claimant_name
+
+// Create relationship
+MERGE (person)-[:FILED {filed_at: datetime()}]->(claim)
+
+// Add Provider if present
+FOREACH (provider IN CASE WHEN $provider_name IS NOT NULL THEN [$provider_name] ELSE [] END |
+  MERGE (p:Provider {name: provider})
+  MERGE (claim)-[:TREATED_BY]->(p)
+)
+
+// Add Contact if present (hash PII before storing)
+FOREACH (phone IN CASE WHEN $phone IS NOT NULL THEN [$phone] ELSE [] END |
+  MERGE (c:Contact {value: $phone_hash, type: 'phone'})
+  MERGE (person)-[:HAS_CONTACT]->(c)
+)
+
+// Add Invoice if present
+FOREACH (inv IN CASE WHEN $invoice_number IS NOT NULL THEN [$invoice_number] ELSE [] END |
+  MERGE (f:Financial {identifier: inv, type: 'invoice'})
+  MERGE (claim)-[:REFERENCES]->(f)
+)
+```
+
+**Critical:**
+- `$claim_id` is always `claims.id` (UUID). `policy_number` is never passed to Neo4j as a node identifier.
+- `$person_id` is a UUID looked up or generated in Postgres (e.g., a `claimants` table or a hash-to-UUID mapping) — never the raw claimant name string.
+- `$phone_hash` is `sha256(phone_number)` — PII is hashed before graph storage.
+
+---
+
+#### Fraud Pattern Queries
+
+**Pattern 1: High-Velocity Provider**
+```cypher
+MATCH (provider:Provider)<-[:TREATED_BY]-(claim:Claim)
+WHERE claim.date > date() - duration('P7D')
+WITH provider, count(claim) as claim_count
+WHERE claim_count > $threshold
+RETURN provider.name, claim_count
+```
+
+**Threshold:** config.get("fraud.tier3.provider_velocity_threshold", default=10)
+
+**If matched:**
+```
+RETURN {
+  "pattern": "high_velocity_provider",
+  "severity": "high",
+  "description": "Provider '{name}' linked to {count} claims in 7 days",
+  "risk_score": 0.8
 }
 ```
 
 ---
 
-## Phase 8: Integration & Testing
+**Pattern 2: Shared Contact**
+```cypher
+MATCH (person:Person)-[:HAS_CONTACT]->(contact:Contact)
+WITH contact, count(DISTINCT person) as person_count
+WHERE person_count > $threshold
+RETURN contact.value, contact.type, person_count
+```
 
-**Duration:** 4-6 hours  
-**Goal:** Connect all components and test end-to-end
+**Threshold:** config.get("fraud.tier3.shared_contact_threshold", default=3)
 
-### Task 8.1: Complete Backend Integration
+**If matched:**
+```
+RETURN {
+  "pattern": "shared_contact",
+  "severity": "medium",
+  "description": "Contact shared by {count} people",
+  "risk_score": 0.7
+}
+```
 
+---
+
+**Pattern 3: Circular Banking**
+```cypher
+MATCH (person:Person)-[:HAS_ACCOUNT]->(account:Financial {type: 'bank_account'})
+WITH account, count(DISTINCT person) as person_count
+WHERE person_count > $threshold
+RETURN account.identifier, person_count
+```
+
+**Threshold:** config.get("fraud.tier3.shared_account_threshold", default=2)
+
+**Risk Score:** 0.9 (bank accounts rarely legitimately shared)
+
+---
+
+**Pattern 4: Network Size**
+```cypher
+MATCH (person:Person {id: $person_id})-[:HAS_CONTACT|FILED|HAS_ACCOUNT*1..2]-(connected)
+RETURN count(DISTINCT connected) as network_size
+```
+
+**Logic:**
+```
+IF network_size > config.get("fraud.tier3.large_network_threshold", default=10):
+    ADD risk signal (score = 0.3)
+```
+
+---
+
+#### Error Handling
+
+```
+IF Neo4j query timeout (>5 seconds):
+    Log warning
+    Return partial results
+    Don't fail entire fraud check
+
+IF Neo4j connection failed:
+    Log error
+    Alert admin
+    Set tier3_score = 0.0 (don't block claim for infra issues)
+    
+IF Cypher query error (syntax, etc):
+    Log error with full query
+    Alert developer
+    Set tier3_score = 0.0
+```
+
+---
+
+#### Tier 3 Score Calculation
+
+**Logic:**
+```
+IF no risk_signals:
+    score = 0.3 IF network_size > 10 ELSE 0.0
+ELSE:
+    avg_risk = average([signal['risk_score'] for signal in risk_signals])
+    score = avg_risk
+    
+    IF network_size > 10:
+        score = min(score * 1.2, 1.0)  # Boost if large network
+
+RETURN score
+```
+
+---
+
+### 4.4 Fraud Fusion
+
+**Goal:** Combine three tier scores into single fraud risk score.
+
+**Load Weights from Config:**
+```
+weights = config.get("fraud.fusion.weights", default=[0.3, 0.3, 0.4])
+w1, w2, w3 = weights
+
+VALIDATE:
+  - weights is array of 3 numbers
+  - sum(weights) ≈ 1.0 (within 0.01 tolerance)
+  - all weights >= 0
+
+IF validation fails:
+  Log error
+  Use default weights [0.3, 0.3, 0.4]
+```
+
+**Calculate Combined Score:**
+```
+combined_score = (w1 * tier1_score) + (w2 * tier2_score) + (w3 * tier3_score)
+combined_score = clamp(combined_score, 0.0, 1.0)
+```
+
+**Determine Risk Level:**
+```
+IF combined_score < config.get("fraud.low_threshold", 0.3):
+    risk_level = "low"
+    recommendation = "proceed"
+ELSE IF combined_score < config.get("fraud.high_threshold", 0.7):
+    risk_level = "medium"
+    recommendation = "review"
+ELSE:
+    risk_level = "high"
+    recommendation = "investigate"
+```
+
+**Generate Explanation:**
+```
+IF risk_level == "high":
+    Get top 3 most severe flags across all tiers
+    explanation = "High fraud score due to: " + join(top_flags, ", ")
+ELSE IF risk_level == "medium":
+    explanation = "Moderate fraud indicators detected"
+ELSE:
+    explanation = "No significant fraud indicators"
+```
+
+---
+
+### Validation Criteria
+
+**Test 1: Duplicate Invoice (Tier 1)**
+- Setup: Invoice "INV-123" already in database
+- Input: New claim with same invoice
+- Expected: Tier 1 flags it, score ≥ 0.8
+
+**Test 2: Image Reuse (Tier 2)**
+- Setup: Image embedded in Qdrant
+- Input: Same image (or 98% similar)
+- Expected: Tier 2 detects, score ≥ 0.9
+
+**Test 3: Fraud Ring (Tier 3)**
+- Setup: 5 people sharing same phone number
+- Input: New claim from 6th person with same number
+- Expected: Tier 3 flags shared contact pattern
+
+**Test 4: API Timeout**
+- Simulate: Cohere API times out
+- Expected: Tier 2 score = 0.0, processing continues
+
+**Test 5: Combined Score**
+- Tier 1: 0.8 (duplicate invoice)
+- Tier 2: 0.0 (no text/image duplication)
+- Tier 3: 0.3 (small network)
+- Weights: [0.3, 0.3, 0.4]
+- Expected: (0.3×0.8) + (0.3×0.0) + (0.4×0.3) = 0.36 (medium risk)
+
+**Definition of Done:**
+- All three tiers execute
+- Detects duplicate invoices
+- Detects similar images/text
+- Detects graph patterns
+- Handles API failures gracefully
+- Weights loaded from config
+- Combined score calculated correctly
+- All tests pass
+
+---
+
+## Component 5: Layer 4 - Decision Engine
+
+### Goal
+Route claim to appropriate queue using economic optimization.
+
+### Decision Tree (Exact Logic)
+
+> **Patch 1+2 applied:** All outcome labels are lowercase `final_decision` values. `→ MANUAL_REVIEW` etc. have been replaced with the canonical enum values.
+
+```
+START
+
+IF extraction_confidence < config.get("extraction.min_confidence"):
+    → final_decision = 'manual_review', status = 'under_review'
+    Reason: "Low extraction confidence: {confidence}"
+    STOP
+
+IF policy_decision.decision == "rejected":
+    → final_decision = 'auto_reject', status = 'finalized'
+    Reason: policy_decision.rejection_reason
+    STOP
+
+IF policy_decision.decision == "ambiguous":
+    → final_decision = 'manual_review', status = 'under_review'
+    Reason: "Policy coverage unclear"
+    STOP
+
+IF fraud_score > config.get("fraud.high_threshold"):
+    → final_decision = 'fraud_investigation', status = 'fraud_investigation'
+    Reason: "High fraud risk ({fraud_score:.2f})"
+    STOP
+
+expected_loss = fraud_score * claimed_amount
+investigation_cost = config.get("decision.investigation_cost")
+
+IF expected_loss > investigation_cost:
+    → final_decision = 'manual_review', status = 'under_review'
+    Reason: "Expected loss (${expected_loss:.2f}) exceeds investigation cost (${investigation_cost})"
+    STOP
+
+IF fraud_score < config.get("fraud.low_threshold") AND extraction_confidence > config.get("extraction.min_confidence"):
+    → final_decision = 'auto_approve', status = 'finalized'
+    Reason: "Low fraud risk ({fraud_score:.2f}), high confidence ({extraction_confidence:.2f})"
+    STOP
+
+ELSE:
+    → final_decision = 'manual_review', status = 'under_review'  (default fail-safe)
+    Reason: "Moderate risk/confidence requires review"
+    STOP
+```
+
+---
+
+### Next Steps Generation
+
+**For `auto_approve`:**
+```
+[
+  "Process payment of ${benefit_amount}",
+  "Send approval notification to claimant",
+  "Update policy annual limit (${annual_limit_remaining} remaining)",
+  "Archive documents"
+]
+```
+
+**For `auto_reject`:**
+```
+[
+  "Send rejection notice with reason: {rejection_reason}",
+  "Include appeal instructions and deadline",
+  "Archive documents",
+  "No payment processing"
+]
+```
+
+**For `manual_review`:**
+```
+[
+  "Assign to underwriter review queue",
+  "Priority: {confidence_level}",
+  "Review focus: {specific_concerns}",
+  "Expected SLA: 2 business days"
+]
+
+specific_concerns:
+  IF low extraction_confidence: "Verify extracted data accuracy"
+  IF moderate fraud_score: "Review fraud indicators: {top_2_flags}"
+  IF missing data: "Obtain missing information: {missing_fields}"
+```
+
+**For `fraud_investigation`:**
+```
+[
+  "Escalate to Special Investigation Unit (SIU)",
+  "Freeze payment pending investigation",
+  "Review related claims: {graph_connected_claims}",
+  "Investigation focus: {fraud_patterns_detected}",
+  "Estimated investigation time: 5-10 business days"
+]
+```
+
+---
+
+### Confidence Level
+
+**Logic:**
+```
+IF final_decision in ['auto_approve', 'auto_reject'] AND no edge cases:
+    confidence_level = "high"
+    
+ELSE IF final_decision == 'fraud_investigation' AND fraud_score > 0.85:
+    confidence_level = "high"
+    
+ELSE IF final_decision == 'manual_review' AND clear reason:
+    confidence_level = "medium"
+    
+ELSE:
+    confidence_level = "low"
+```
+
+---
+
+### Output Format
+
+> **Patch 2 applied:** field renamed from `decision` to `final_decision`.
+> **Patch 3 applied:** example values now numerically consistent — fraud_score=0.10, claimed_amount=1000 → expected_loss=$100 which is below investigation_cost=$150, correctly yielding `auto_approve`.
+
+```json
+{
+  "final_decision": "auto_approve",
+  "expected_loss": 100.00,
+  "investigation_cost": 150.00,
+  "benefit_amount": 1200.00,
+  "rationale": "Low fraud risk (0.10), high confidence (0.92). Expected loss ($100.00 = 0.10 × $1,000) is below investigation cost ($150.00). Proceeding to auto-approve.",
+  "confidence_level": "high",
+  "next_steps": ["Process payment of $1200.00", "Send approval notification to claimant"],
+  "thresholds_used": {
+    "extraction_min_confidence": 0.85,
+    "fraud_high_threshold": 0.7,
+    "fraud_low_threshold": 0.2,
+    "investigation_cost": 150.00
+  }
+}
+```
+
+---
+
+### Validation Criteria
+
+**Test Decision Tree:**
+
+| Scenario | Expected `final_decision` | Expected `status` |
+|----------|--------------------------|-------------------|
+| confidence=0.75 (below min 0.85) | `manual_review` | `under_review` |
+| policy_decision=rejected | `auto_reject` | `finalized` |
+| fraud_score=0.85 (above high threshold 0.7) | `fraud_investigation` | `fraud_investigation` |
+| fraud=0.15, claimed=$3000, expected_loss=$450 > cost=$150 | `manual_review` | `under_review` |
+| fraud=0.10, claimed=$1000, expected_loss=$100 < cost=$150, confidence=0.95 | `auto_approve` | `finalized` |
+| Default (no clear path) | `manual_review` | `under_review` |
+
+**Definition of Done:**
+- Decision tree implemented correctly
+- All thresholds from config
+- Economic calculation correct
+- Rationale generated
+- Next steps appropriate
+- Tests pass
+- No hardcoded values
+
+---
+
+## Component 6: State Machine & Orchestration
+
+### Goal
+Manage claim lifecycle with atomic state transitions and failure recovery.
+
+### State Definitions
+
+> **Day-0 + Patch 2 applied:** State names unified with `claims.status` enum values (lowercase snake_case). Outcome is stored in `claims.final_decision`, never in `claims.status`. The old conflated values (`APPROVED`, `REJECTED`, `REVIEW_QUEUE`, etc.) are removed.
+
+```
+Status values (claims.status):
+
+  submitted           → Initial state after upload
+  extracting          → Layer 1 in progress
+  extracted           → Layer 1 complete, normalized columns + extraction_raw written
+  policy_evaluating   → Layer 2 in progress
+  fraud_checking      → Layer 3 in progress
+  deciding            → Layer 4 in progress
+  finalized           → Auto decision made; claims.final_decision = 'auto_approve' | 'auto_reject'
+  under_review        → Routed to manual underwriter queue; claims.final_decision = 'manual_review'
+  fraud_investigation → Routed to SIU; claims.final_decision = 'fraud_investigation'
+  error               → Permanent failure; requires manual intervention; final_decision = NULL
+
+Final decision values (claims.final_decision) — set atomically with terminal status:
+
+  auto_approve        → Straight-through approval; status = 'finalized'
+  auto_reject         → Straight-through rejection; status = 'finalized'
+  manual_review       → Routed to underwriter queue; status = 'under_review'
+  fraud_investigation → Routed to SIU; status = 'fraud_investigation'
+```
+
+### State Transition Rules
+
+```
+submitted          → extracting          (worker picks up claim)
+extracting         → extracted           (Layer 1 succeeds; normalized columns + extraction_raw written)
+extracting         → under_review        (Layer 1 fails permanently; final_decision = 'manual_review')
+
+extracted          → policy_evaluating   (Layer 2 starts)
+policy_evaluating  → fraud_checking      (policy check passed or ambiguous — Layer 3 proceeds)
+policy_evaluating  → finalized           (policy rejected; final_decision = 'auto_reject')
+policy_evaluating  → under_review        (policy ambiguous and cannot auto-route; final_decision = 'manual_review')
+
+fraud_checking     → deciding            (Layer 3 completes)
+fraud_checking     → under_review        (Layer 3 fails permanently; final_decision = 'manual_review')
+
+deciding           → finalized           (auto outcome; final_decision = 'auto_approve' | 'auto_reject')
+deciding           → under_review        (Layer 4 cannot resolve fail-safe; final_decision = 'manual_review')
+deciding           → fraud_investigation (high fraud score; final_decision = 'fraud_investigation')
+
+finalized          → under_review        (human escalation of an auto decision)
+finalized          → fraud_investigation (SIU escalation post-approval)
+
+Any non-terminal   → error              (unrecoverable system failure; final_decision = NULL)
+```
+
+**Invariant:** `status` and `final_decision` are always updated in the same atomic database transaction. They are never written independently.
+
+### Implementation Requirements
+
+**1. Atomic Transitions**
+```sql
+-- Use canonical lowercase enum values (Day-0 Fix D)
+BEGIN;
+  UPDATE claims 
+  SET status = 'extracting', 
+      current_state_context = '{"worker_id": "...", "started_at": "..."}'
+  WHERE id = :claim_id 
+    AND status = 'submitted';  -- Only transition if in the expected prior state
+  
+  -- rows_updated = 0 means another worker already claimed it
+  IF rows_updated == 0:
+    ROLLBACK;
+    RAISE error "Invalid state transition or concurrent worker conflict"
+  ELSE:
+    COMMIT;
+```
+
+**2. Idempotent State Changes**
+```
+IF current_status == target_status:
+    RETURN success (no-op, already in that state)
+ELSE:
+    Attempt transition
+```
+
+**3. Retry Logic**
+```
+FOR EACH layer:
+  max_retries = 3
+  retry_count = get_from_state_context('retry_count', 0)
+  
+  TRY:
+    Execute layer
+    Transition to next state
+  CATCH error:
+    IF retry_count < max_retries:
+      retry_count += 1
+      Update state_context with retry_count
+      Emit audit_event(stage=current_layer, event_type='retried', payload={attempt, error})
+      Exponential backoff (2^retry_count seconds)
+      Retry
+    ELSE:
+      -- Permanent failure: transition atomically
+      UPDATE claims SET status='under_review', final_decision='manual_review' WHERE id=:claim_id
+      Emit audit_event(stage=current_layer, event_type='failed', payload={max_retries, final_error})
+      Log failure
+```
+
+**4. Stuck Claim Detection**
+```
+Background job (runs every 15 minutes):
+
+Find claims WHERE:
+  -- All non-terminal statuses (Day-0 Fix D)
+  status NOT IN ('finalized', 'under_review', 'fraud_investigation', 'error')
+  AND updated_at < NOW() - INTERVAL '1 hour'
+
+FOR EACH stuck_claim:
+  Alert admin
+  Log error with last known state
+  Option to manually retry or move to 'error' status
+```
+
+---
+
+### Validation Criteria
+
+**Test 1: Normal Flow**
+- Claim progresses: `submitted → extracting → extracted → policy_evaluating → fraud_checking → deciding → finalized`
+- No invalid transitions
+- Each state transition logged as a new `audit_events` row with timestamp
+
+**Test 2: Layer Failure**
+- Layer 1 fails 3 times
+- Expected: Claim moves to `under_review`
+- Retry count logged in `current_state_context` and as separate `audit_events` rows
+
+**Test 3: Concurrent Access**
+- Two workers try to process same claim
+- Expected: One succeeds (rows_updated=1), one gets conflict (rows_updated=0)
+- No duplicate processing
+
+**Test 4: Resume After Failure**
+- Claim stuck in `fraud_checking`
+- Manual retry triggered
+- Expected: Resumes from `fraud_checking`, not from beginning
+
+**Definition of Done:**
+- State machine implemented
+- Atomic transitions
+- Retry logic works
+- Stuck claim detection works
+- Tests pass
+
+---
+
+## Component 7: API Implementation
+
+### Critical Endpoints
+
+#### POST /api/v1/claims
+**Purpose:** Submit new claim
+
+**Request:**
+```
+Content-Type: multipart/form-data
+
+files: [File, File, ...]
+policy_number: string (optional)
+request_id: UUID (for idempotency)
+```
+
+**Logic:**
+```
+1. Validate files:
+   - Check file types (allow: pdf, png, jpg, mp4, mp3, wav)
+   - Check file sizes (max 50MB each, 200MB total)
+   - Scan for viruses (optional but recommended)
+
+2. Check idempotency:
+   existing = find_claim_by_idempotency_key(request_id)
+   IF existing:
+     RETURN existing claim (don't create duplicate)
+
+3. Create claim record:
+   claim_id = generate_uuid()
+   claim_number = generate_human_readable() // e.g., "CLM-2024-001234"
+   INSERT INTO claims (id, claim_number, idempotency_key, status, extraction_raw)
+   VALUES (claim_id, claim_number, request_id, 'submitted', '{}')
+   -- extraction_raw starts as '{}' NOT NULL; written fully only after Layer-1 succeeds
+
+4. Store files + sha256 deduplication:
+   FOR EACH uploaded file:
+     sha256 = sha256_hex(file_bytes)
+     Save to storage (S3 or local), record storage_key
+     INSERT INTO claim_documents (claim_id, storage_key, sha256, file_name, ...)
+     
+     -- Cross-claim duplicate document detection (Patch 9):
+     existing = SELECT claim_id FROM claim_documents
+                WHERE sha256 = :sha256 AND claim_id != :current_claim_id
+                LIMIT 1
+     IF existing:
+       -- Do NOT auto-reject. Create a Tier-1 fraud flag instead (fail-safe rule).
+       -- The flag is passed to Layer 3 for scoring; decision is deferred to Layer 4.
+       queue_fraud_flag(
+         claim_id=current_claim_id,
+         flag_type="duplicate_document",
+         severity="high",
+         evidence={"sha256": sha256, "previous_claim_id": existing.claim_id}
+       )
+
+5. Queue for processing:
+   Send to n8n webhook OR Celery queue
+
+6. Return response:
+   {
+     "claim_id": "UUID",
+     "claim_number": "CLM-2024-001234",
+     "status": "submitted",
+     "estimated_processing_time": "30-60 seconds"
+   }
+```
+
+**Status Codes:**
+- 201 Created (success)
+- 400 Bad Request (invalid files/data)
+- 413 Payload Too Large (files too big)
+- 429 Too Many Requests (rate limit)
+
+---
+
+#### GET /api/v1/claims/{claim_id}
+**Purpose:** Get claim status and details
+
+**Response:**
+```json
+{
+  "claim_id": "UUID",
+  "claim_number": "CLM-2024-001234",
+  "status": "finalized",
+  "final_decision": "auto_approve",
+  "benefit_amount": 1200.00,
+  "extraction_confidence": 0.92,
+  "fraud_score": 0.10,
+  "submitted_at": "2024-02-19T10:00:00Z",
+  "processed_at": "2024-02-19T10:00:45Z",
+  "decision_output": { "rationale": "...", "next_steps": ["..."] }
+}
+```
+
+**Status Codes:**
+- 200 OK
+- 404 Not Found
+
+---
+
+#### POST /api/v1/claims/{claim_id}/feedback
+**Purpose:** Submit human review feedback
+
+**Request:**
+```json
+{
+  "reviewed_by": "user_id",
+  "system_decision": "auto_approve",
+  "human_decision": "reject",
+  "feedback_category": "fraud_missed",
+  "feedback_notes": "Found duplicate invoice that system missed"
+}
+```
+
+**Logic:**
+```
+1. Validate claim exists
+2. Validate reviewer has permissions
+3. Insert into feedback table
+4. Mark claim as reviewed
+5. If disagreement, flag for retraining
+```
+
+---
+
+### Rate Limiting
+
+**Per IP:** 100 requests/minute
+**Per User:** 500 requests/minute
+
+**Implementation:**
+```
+Use Redis for rate limit tracking:
+
+key = f"rate_limit:{ip_address}"
+current = redis.get(key) OR 0
+
+IF current >= limit:
+    RETURN 429 Too Many Requests
+    Headers: {
+      "X-RateLimit-Limit": 100,
+      "X-RateLimit-Remaining": 0,
+      "X-RateLimit-Reset": timestamp
+    }
+ELSE:
+    redis.incr(key)
+    redis.expire(key, 60)  # 1 minute window
+```
+
+---
+
+## Component 8: Frontend Requirements
+
+### Pages Needed
+
+**1. Claim Submission Page**
+- File upload (drag & drop)
+- Policy number input (optional)
+- Progress indicator
+- Success confirmation with claim number
+
+**2. Dashboard**
+- List of claims (table)
+- Filters: status, date range
+- Search by claim number
+- Pagination
+- Auto-refresh every 30s
+
+**3. Claim Details Page**
+- All extracted data
+- Policy decision
+- Fraud analysis (scores, flags)
+- Final decision
+- Complete audit trail
+- Uploaded documents (download links)
+
+**4. Review Queue (For Underwriters)**
+- Claims needing review
+- Priority sorting (high risk first)
+- Claim details inline
+- Decision form (approve/reject/request more info)
+- Feedback form
+
+**5. Fraud Network Visualization**
+- Graph canvas (React Flow or D3)
+- Node types: Claim, Person, Provider, Contact
+- Edge types: FILED, TREATED_BY, HAS_CONTACT
+- Highlight suspicious patterns
+
+---
+
+### User Experience Requirements
+
+**Loading States:**
+- Skeleton loaders for data fetching
+- Spinner for submit actions
+- Progress bar for file upload
+
+**Error Handling:**
+- User-friendly error messages
+- Retry buttons for failed requests
+- Offline detection
+
+**Accessibility:**
+- ARIA labels
+- Keyboard navigation
+- Screen reader support
+- WCAG AA compliance
+
+---
+
+## Testing Requirements
+
+### Unit Tests
+
+**What to Test:**
+- Policy benefit calculation
+- Fraud score fusion
+- Schema validation
+- State transitions
+
+**How:**
 ```python
-# backend/app/api/routes.py - Complete implementation
-
-from fastapi import APIRouter, UploadFile, File, Depends, BackgroundTasks
-from sqlalchemy.orm import Session
-from typing import List
-import time
-import uuid
-
-from app.database import get_db
-from app.models.schemas import ClaimExtraction
-from app.layers.layer2_policy.engine import PolicyEngine
-from app.layers.layer3_fraud.engine import FraudEngine
-from app.layers.layer4_decision.engine import DecisionEngine
-from app.layers.layer5_audit.logger import AuditLogger
-
-router = APIRouter(prefix="/api/v1")
-
-@router.post("/claims/process")
-async def process_claim(
-    files: List[UploadFile] = File(...),
-    policy_number: str = None,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: Session = Depends(get_db)
-):
-    """
-    Complete claim processing pipeline
-    Orchestrates all 5 layers
-    """
+def test_benefit_calculation():
+    claim = create_mock_claim(amount=1000, copay=20)
+    policy = create_mock_policy(copay_percentage=20)
     
-    start_time = time.time()
-    claim_id = str(uuid.uuid4())
+    result = calculate_benefit(claim, policy)
     
-    try:
-        # Step 1: Send files to n8n for Layer 1 processing
-        # (In real implementation, upload to n8n webhook)
-        # For now, mock the extraction result
-        
-        extraction = ClaimExtraction(
-            policy_number=policy_number or "MOCK-001",
-            claimant={"name": "Test User"},
-            incident={
-                "date": "2024-02-01",
-                "type": "accident",
-                "description": "Test incident"
-            },
-            financial={"claimed_amount": 1500.0},
-            extraction_metadata={
-                "model_used": "gemma-3",
-                "extraction_timestamp": "2024-02-01T12:00:00",
-                "overall_confidence": 0.92,
-                "field_confidences": [],
-                "warnings": [],
-                "source_file_type": "pdf"
-            }
-        )
-        
-        # Step 2: Layer 2 - Policy evaluation
-        policy_engine = PolicyEngine(db)
-        policy_decision = await policy_engine.evaluate_claim(
-            claim=extraction,
-            policy_number=extraction.policy_number,
-            claim_date=extraction.incident.date
-        )
-        
-        # Step 3: Layer 3 - Fraud detection
-        fraud_engine = FraudEngine(db)
-        fraud_analysis = await fraud_engine.analyze(
-            claim=extraction,
-            claim_images=[],  # Extract from files
-            policy_id=extraction.policy_number
-        )
-        
-        # Step 4: Layer 4 - Final decision
-        decision_engine = DecisionEngine()
-        final_decision = await decision_engine.make_decision(
-            extraction=extraction,
-            policy_decision=policy_decision,
-            fraud_analysis=fraud_analysis
-        )
-        
-        # Step 5: Layer 5 - Audit logging (background)
-        processing_time = int((time.time() - start_time) * 1000)
-        
-        background_tasks.add_task(
-            log_audit_trail,
-            claim_id,
-            extraction,
-            policy_decision,
-            fraud_analysis,
-            final_decision,
-            processing_time
-        )
-        
-        return final_decision
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-async def log_audit_trail(claim_id, extraction, policy_decision, fraud_analysis, final_decision, processing_time):
-    """Background task for audit logging"""
-    db = SessionLocal()
-    audit_logger = AuditLogger(db)
-    await audit_logger.log_claim_processing(
-        claim_id=claim_id,
-        extraction=extraction,
-        policy_decision=policy_decision,
-        fraud_analysis=fraud_analysis,
-        final_decision=final_decision,
-        processing_time_ms=processing_time
-    )
-    db.close()
+    assert result.benefit_amount == 800  # 1000 * 0.8
+    assert "Applied 20% copay" in result.calculation_trail
 ```
 
-### Task 8.2: Create Test Data
+---
 
+### Integration Tests
+
+**What to Test:**
+- API endpoints
+- Database operations
+- Layer interactions
+
+**Example:**
 ```python
-# backend/scripts/seed_test_data.py
-
-from app.database import SessionLocal
-import uuid
-
-def seed_test_data():
-    """Seed database with test data"""
+def test_claim_submission_flow():
+    # Submit claim
+    response = client.post("/api/v1/claims", files=test_files)
+    assert response.status_code == 201
+    claim_id = response.json()["claim_id"]
     
-    db = SessionLocal()
+    # Wait for processing
+    time.sleep(5)
     
-    # Create test policies
-    test_policies = [
-        {
-            'id': str(uuid.uuid4()),
-            'policy_number': 'P-2024-001',
-            'policy_holder_name': 'John Doe',
-            'policy_type': 'health',
-            'start_date': '2024-01-01',
-            'end_date': '2024-12-31',
-            'status': 'active',
-            'rules_version': 'v1.0'
-        }
-    ]
-    
-    # Insert policies
-    # SQL: INSERT INTO policies ...
-    
-    # Create test claims
-    test_claims = [
-        {
-            'id': str(uuid.uuid4()),
-            'claim_number': 'CLM-001',
-            'claimant_name': 'Alice Smith',
-            'incident_date': '2024-02-01',
-            'claimed_amount': 1500.00,
-            'status': 'approved',
-            'fraud_score': 0.05
-        },
-        {
-            'id': str(uuid.uuid4()),
-            'claim_number': 'CLM-002',
-            'claimant_name': 'Bob Johnson',
-            'incident_date': '2024-02-02',
-            'claimed_amount': 3200.00,
-            'status': 'under_review',
-            'fraud_score': 0.45
-        }
-    ]
-    
-    # Insert claims
-    # SQL: INSERT INTO claims ...
-    
-    print("Test data seeded successfully")
-    db.close()
-
-if __name__ == "__main__":
-    seed_test_data()
-```
-
-### Task 8.3: End-to-End Testing
-
-```bash
-# Run end-to-end test
-
-# 1. Start all services
-docker-compose up -d
-
-# 2. Start backend
-cd backend
-python -m app.main
-
-# 3. Start frontend (new terminal)
-cd frontend
-npm run dev
-
-# 4. Test workflow:
-# - Upload a test PDF through frontend
-# - Verify n8n processes it
-# - Check PostgreSQL for claim record
-# - Verify Qdrant has embeddings
-# - Check Neo4j for graph nodes
-# - Verify final decision appears in UI
+    # Check status
+    response = client.get(f"/api/v1/claims/{claim_id}")
+    assert response.json()["status"] in ["finalized", "under_review", "fraud_investigation"]
 ```
 
 ---
 
-## Phase 9: Demo Preparation
+### End-to-End Tests
 
-**Duration:** 2-3 hours  
-**Goal:** Polish UI and prepare demonstration
-
-### Task 9.1: Create Demo Script
-
-```markdown
-# Demo Script
-
-## Introduction (30 seconds)
-"Lexora is an AI-powered insurance claims platform that processes claims 
-in seconds while detecting fraud and maintaining full explainability."
-
-## Live Demo (3 minutes)
-
-### 1. Submit Claim (30 seconds)
-- Show multi-file upload (PDF + Image)
-- Enter policy number
-- Click submit
-
-### 2. Processing Visualization (1 minute)
-- Show Layer 1: Document extraction
-- Show Layer 2: Policy evaluation
-- Show Layer 3: Fraud detection (3 tiers)
-- Show Layer 4: Decision routing
-
-### 3. Results (30 seconds)
-- Display decision (Auto-Approve / Review / Investigate)
-- Show fraud score
-- Show benefit amount
-- Display rationale
-
-### 4. Fraud Network (1 minute)
-- Show graph visualization
-- Highlight detected fraud ring
-- Explain network patterns
-
-## Key Differentiators
-1. Multi-modal processing (PDFs, videos, images, audio)
-2. Three-tier fraud detection (catches organized fraud)
-3. Economic optimization (smart routing)
-4. Complete explainability (audit trail)
-5. Active learning (improves over time)
-```
-
-### Task 9.2: Create Sample Claims
-
-```bash
-# Prepare 5 demo claims:
-
-# Claim 1: Clean claim (Auto-Approve)
-- Medical bill PDF
-- Low fraud score
-- High confidence
-
-# Claim 2: Policy violation (Auto-Reject)
-- Claim outside coverage
-- Clear rejection reason
-
-# Claim 3: Moderate fraud (Manual Review)
-- Similar to previous claim
-- Medium fraud score
-
-# Claim 4: High fraud (Investigation)
-- Duplicate invoice
-- High fraud score
-- Network connections
-
-# Claim 5: Low confidence (Manual Review)
-- Poor quality scan
-- Low extraction confidence
-```
-
-### Task 9.3: Polish UI
-
-```typescript
-// Add loading states
-// Add animations
-// Add tooltips
-// Improve error handling
-// Add success messages
-```
-
-### Task 9.4: Create Presentation
-
-```markdown
-# Pitch Deck Outline
-
-## Slide 1: Problem
-- Claims processing is slow (38 days average)
-- Fraud costs $45B/year
-- Current solutions lack explainability
-
-## Slide 2: Solution
-- 5-layer neuro-symbolic architecture
-- Multi-modal AI processing
-- Three-tier fraud detection
-- Economic optimization
-
-## Slide 3: Live Demo
-[Run actual demo]
-
-## Slide 4: Technology
-- Next.js frontend
-- FastAPI backend
-- n8n orchestration
-- Multi-database architecture
-
-## Slide 5: Key Innovations
-- Only solution combining AI + deterministic rules
-- Graph-based fraud detection (high barrier to entry)
-- Active learning (continuous improvement)
-
-## Slide 6: Business Impact
-- 78% faster processing
-- 72% cost reduction
-- Catches organized fraud rings
-- Full regulatory compliance
-
-## Slide 7: Next Steps
-- Pilot with insurance company
-- Integrate with Guidewire
-- Enterprise deployment
-```
+**Scenarios:**
+1. Valid claim → Approved
+2. Duplicate invoice → Fraud investigation
+3. Policy violation → Rejected
+4. Low confidence → Manual review
 
 ---
 
-## Final Checklist
+## Security Checklist
 
-### Pre-Demo Testing
-- [ ] All databases running
-- [ ] n8n workflow tested
-- [ ] Backend API endpoints work
-- [ ] Frontend loads properly
-- [ ] Sample claims prepared
-- [ ] Demo script practiced
+**1. Input Validation**
+- ✓ File type validation
+- ✓ File size limits
+- ✓ SQL injection prevention (use parameterized queries)
+- ✓ XSS prevention (sanitize outputs)
 
-### Code Quality
-- [ ] Code commented
-- [ ] README.md complete
-- [ ] Environment variables documented
-- [ ] Docker setup verified
+**2. Authentication**
+- ✓ API key for programmatic access
+- ✓ Session management for web UI
+- ✓ Role-based access control
 
-### Presentation
-- [ ] Slides prepared
-- [ ] Demo script ready
-- [ ] Backup plan (video recording)
-- [ ] Q&A preparation
+**3. Data Protection**
+- ✓ Encrypt PII at rest
+- ✓ HTTPS only (TLS 1.2+)
+- ✓ Hash sensitive data in graph (phone, accounts)
 
----
-
-## Quick Start Commands
-
-```bash
-# Start everything
-docker-compose up -d
-
-# Backend
-cd backend
-python -m app.main
-
-# Frontend
-cd frontend
-npm run dev
-
-# Access:
-# - Frontend: http://localhost:3000
-# - Backend: http://localhost:8000
-# - n8n: http://localhost:5678
-# - Neo4j: http://localhost:7474
-# - Qdrant: http://localhost:6333/dashboard
-```
+**4. Secrets Management**
+- ✓ API keys in environment variables
+- ✓ Never log API keys
+- ✓ Rotate keys periodically
 
 ---
 
-## Troubleshooting
+## Deployment Checklist
 
-### Common Issues
+**Pre-Deployment:**
+- ✓ All tests pass
+- ✓ Database migrations tested
+- ✓ Environment variables set
+- ✓ Secrets in secure storage
+- ✓ Monitoring configured
 
-**Issue: Database connection failed**
-```bash
-# Check if databases are running
-docker-compose ps
-
-# Restart databases
-docker-compose restart postgres redis qdrant neo4j
-```
-
-**Issue: n8n workflow not executing**
-```bash
-# Check n8n logs
-docker-compose logs n8n
-
-# Verify webhook URL
-curl http://localhost:5678/webhook/claim-upload
-```
-
-**Issue: Frontend can't connect to backend**
-```bash
-# Check CORS settings in backend
-# Verify API_BASE_URL in frontend .env
-```
+**Deployment Steps:**
+1. Run migrations on staging
+2. Deploy to staging
+3. Run smoke tests
+4. Deploy to production (blue-green)
+5. Monitor error rates
+6. Rollback plan ready
 
 ---
 
-## Success Criteria
+## Success Criteria (Definition of Done)
 
-Your implementation is complete when:
+### Functional Completeness
+✓ All 5 layers implemented
+✓ All file types supported (PDF, image, video, audio)
+✓ State machine works
+✓ Idempotency works
+✓ Configuration in database (no hardcoded values)
+✓ Complete audit trail
+✓ Feedback collection works
 
-✅ Users can upload multi-modal files (PDF, video, image, audio)
-✅ n8n successfully processes and extracts data
-✅ All 5 layers execute sequentially
-✅ Final decision appears in UI with explanation
-✅ Fraud network visualizes properly
-✅ Audit trail is logged to database
-✅ Demo runs smoothly end-to-end
+### Quality Standards
+✓ All thresholds configurable
+✓ All IDs correct (UUIDs, not policy numbers)
+✓ Schema validation enforced
+✓ Timeout handling on all APIs
+✓ Retry logic implemented
+✓ Error messages helpful
+✓ Complete calculation trails
+
+### Performance
+✓ End-to-end processing < 60 seconds
+✓ API responses < 500ms
+✓ Handles 100 concurrent claims
+✓ Database queries optimized (indexed)
+
+### Testing
+✓ Unit tests: 80%+ coverage
+✓ Integration tests pass
+✓ End-to-end tests pass
+✓ Edge cases tested
+
+### Demo Ready
+✓ Can submit claim live
+✓ Shows all layer outputs
+✓ Fraud network visualizes
+✓ Review workflow works
+✓ No critical bugs
 
 ---
 
-**This implementation plan provides everything needed to build Lexora from scratch. Follow each phase sequentially, test thoroughly, and prepare an impressive demo!**
+## Strict Roadmap Rules
+
+These rules are derived from the Day-0 Fixes and must be enforced in code review for the lifetime of the project. Any PR that violates these is rejected without exception.
+
+### Identity Rules
+- **`claims.id` (UUID) is the sole claim identifier across all systems.** It is the primary key in Postgres, the `claim_id` field in every Qdrant payload, the `{id: $claim_id}` property on Neo4j `Claim` nodes, and the `claim_id` foreign key in `audit_events`. No other field serves this purpose.
+- **`policy_number` is display-only.** It must never appear as a node ID, a Qdrant point ID, a WHERE clause join key between systems, or in any cross-system reference. It is a field on `claims`, nothing more.
+- **Neo4j `Person` nodes use a generated UUID as `id`**, not the claimant name string. The name is a property, not an identity.
+
+### Schema Rules
+- **Normalized columns only in WHERE clauses.** `invoice_number`, `incident_type`, `claimed_amount`, `provider_name`, `claimant_name` are columns on `claims`. Never query them via JSON path operators (`->`, `->>`). `extraction_raw` is write-once and never used in business logic queries.
+- **`extraction_raw` is written exactly once** — during the `extracting → extracted` transition. It is set to `'{}'` at claim creation (`submitted`), then updated once with the full verbatim Layer-1 payload. It is never overwritten again and never queried for logic.
+- **All timestamps are `TIMESTAMPTZ`.** Any migration that introduces a `TIMESTAMP WITHOUT TIME ZONE` column is rejected.
+- **All monetary fields have `CHECK (field > 0 OR field IS NULL)`.** All 0..1 float fields (confidence, fraud_score) have `CHECK (field BETWEEN 0.0 AND 1.0 OR field IS NULL)`.
+
+### Deduplication Rules (Patch 9)
+- **`idempotency_key` prevents duplicate claim submissions** from the same client request. Check it before any INSERT.
+- **`sha256` per document detects reused files across claims.** Stored in `claim_documents.sha256` (hex SHA-256 of raw file bytes). Indexed for fast cross-claim lookup.
+- **A duplicate document SHA-256 across different claims creates a Tier-1 fraud flag — it does NOT auto-reject.** The fail-safe principle applies: route to fraud scoring, let Layer 4 decide.
+- **Never store raw file bytes in the database.** Files go to object storage (S3 or local filesystem); only the `storage_key` and `sha256` are in Postgres.
+
+### Status & Decision Rules
+- **`claims.status` and `claims.final_decision` are separate concerns.** Status is lifecycle position; `final_decision` is outcome. Never put a decision value in the status column or vice versa.
+- **Use only the canonical lowercase snake_case enum values** defined in Day-0 Fix D: `submitted`, `extracting`, `extracted`, `policy_evaluating`, `fraud_checking`, `deciding`, `finalized`, `under_review`, `fraud_investigation`, `error`. No uppercase, no synonyms, no aliases.
+- **`claims.final_decision` is NULL until a terminal status is reached.** `status` and `final_decision` are always written in the same atomic transaction. Setting `final_decision` without also setting a terminal `status` (or vice versa) is a bug.
+- **`'approved'`, `'rejected'`, `'decision_made'`, `'review_queue'`, `'investigation_queue'` are permanently retired.** They must not appear anywhere in schema definitions, code, queries, tests, or documentation.
+
+### Audit Rules
+- **`audit_events` is INSERT-only.** No `UPDATE` or `DELETE` is ever issued against this table. If a row is wrong, insert a corrective event — do not overwrite.
+- **Every layer emits at least one `audit_events` row** on start, and at least one on completion or failure.
+- **Every retry emits its own `audit_events` row** with `event_type = 'retried'` and `payload` containing the attempt number and error reason.
+- **Replaying `audit_events` for a `claim_id` ordered by `created_at` must reproduce the full decision history.** The `payload` for each event must be self-contained enough to reconstruct what happened without querying any other table.
+
+### Qdrant Rules
+- **Qdrant point IDs are UUID5 values** derived from `uuid5(NAMESPACE_URL, f"{claim_id}:image:{image_index}")` (images) or `uuid5(NAMESPACE_URL, f"{claim_id}:text")` (text). Never use raw SHA-256 hex slices or random UUIDs for points that must be idempotently re-inserted.
+- **Every Qdrant payload contains `claim_id` (UUID).** `policy_number` is never stored in a Qdrant payload.
+
+### Configuration Rules
+- **No numeric threshold, weight, or routing parameter is hardcoded.** Every such value is loaded from the `configuration` table at runtime. Code review fails on any literal like `0.7`, `0.85`, `150.0` appearing in business logic.
+
+---
+
+## Final Notes for Implementers
+
+**This guide is prescriptive about WHAT, flexible about HOW.**
+
+You must:
+- Meet all requirements
+- Handle all edge cases
+- Follow anti-patterns (what NOT to do)
+- Pass all validation criteria
+
+You choose:
+- Libraries and frameworks
+- Code structure and patterns
+- Optimization techniques
+- Additional features
+
+**When uncertain:**
+- Route to manual review (fail-safe)
+- Log errors comprehensively
+- Ask clarifying questions
+- Prioritize correctness over speed
+
+**Build incrementally:**
+- Start with Phase 1-2 (foundation + core layers)
+- Test each component before moving on
+- Add advanced features (Tier 2-3 fraud) later
+- Polish comes last
+
+**Good luck! 🚀**

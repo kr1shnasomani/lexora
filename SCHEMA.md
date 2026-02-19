@@ -1,4 +1,3 @@
-````md
 # Lexora — Supabase Schema Reference (Full Column Dictionary)
 **Version: Final (Strict Roadmap Aligned)**  
 **Purpose:** Authoritative schema context for developers + LLMs (tables, enums, constraints, and **every column with type, description, example**).
@@ -311,7 +310,7 @@ Applied to:
 
 Valid transitions:
 
-```
+
 submitted → extracting
 extracting → extracted
 extracted → policy_evaluating
@@ -321,7 +320,7 @@ deciding → finalized
 deciding → under_review
 deciding → fraud_investigation
 (deciding or any) → error  (on irrecoverable failure)
-```
+
 
 ---
 
