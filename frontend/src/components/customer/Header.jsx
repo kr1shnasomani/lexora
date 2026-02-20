@@ -26,7 +26,7 @@ const Header = ({ showBack = false }) => {
                         />
                     </svg>
                 </div>
-                <h1 className="text-white text-xl font-bold tracking-tight">Intelligence Core</h1>
+                <h1 className="text-white text-xl font-bold tracking-tight">Lexora</h1>
             </div>
 
             <div className="flex items-center gap-4">
