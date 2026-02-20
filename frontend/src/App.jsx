@@ -27,6 +27,7 @@ import NotificationsPage from './pages/customer/NotificationsPage'
 import SecurityPage from './pages/customer/SecurityPage'
 import ChatPage from './pages/customer/ChatPage'
 import RenewalPage from './pages/customer/RenewalPage'
+import FileClaimPage from './pages/customer/FileClaimPage'
 
 export default function App() {
     return (
@@ -60,6 +61,7 @@ export default function App() {
                     <Route path="/customer/security" element={<ProtectedRoute requiredRole="customer"><SecurityPage /></ProtectedRoute>} />
                     <Route path="/customer/chat" element={<ProtectedRoute requiredRole="customer"><ChatPage /></ProtectedRoute>} />
                     <Route path="/customer/renewal" element={<ProtectedRoute requiredRole="customer"><RenewalPage /></ProtectedRoute>} />
+                    <Route path="/customer/file-claim" element={<ProtectedRoute requiredRole="customer"><FileClaimPage /></ProtectedRoute>} />
 
                     {/* ─── Catch-all ───────────────────────────────── */}
                     <Route path="*" element={<Navigate to="/" replace />} />

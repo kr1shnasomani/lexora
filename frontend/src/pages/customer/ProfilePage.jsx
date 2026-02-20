@@ -1,81 +1,126 @@
-import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Header from '../../components/customer/Header'
 import BottomNav from '../../components/customer/BottomNav'
 
+const accountMenuItems = [
+    { icon: 'person', label: 'Personal Details', sub: 'Name, Phone, Email', route: null },
+    {
+        icon: 'credit_card', label: 'Payment Methods',
+        subNode: (
+            <p className="text-slate-400 text-xs flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                Visa •••• 4242
+            </p>
+        ),
+        route: null
+    },
+    { icon: 'notifications', label: 'Notifications', sub: 'Email, SMS, Push', route: '/customer/notifications' },
+    { icon: 'lock', label: 'Security & Privacy', sub: 'Password, 2FA', route: '/customer/security' },
+]
+
+const claimsMenuItems = [
+    { icon: 'history_edu', label: 'Claim History', sub: 'Past and active claims', route: '/customer/claims' },
+    { icon: 'folder_shared', label: 'Documents', sub: 'Policy docs, ID cards', route: '/customer/docs' },
+]
+
+function MenuGroup({ title, items, navigate }) {
+    return (
+        <div className="space-y-3">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest px-2">{title}</h3>
+            <div className="bg-surface-dark-customer border border-surface-border rounded-2xl overflow-hidden divide-y divide-surface-border">
+                {items.map((item) => (
+                    <button
+                        key={item.label}
+                        onClick={() => item.route && navigate(item.route)}
+                        className={`w-full flex items-center justify-between p-4 transition-colors group text-left ${item.danger ? 'hover:bg-red-900/10' : 'hover:bg-surface-border/50'
+                            }`}
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className={`h-10 w-10 rounded-full flex items-center justify-center transition-colors border-0 ${item.danger
+                                    ? 'bg-slate-800 text-red-400 group-hover:text-red-300 group-hover:bg-red-900/30'
+                                    : 'bg-slate-800 text-slate-400 group-hover:text-white group-hover:bg-slate-700'
+                                }`}>
+                                <span className="material-symbols-outlined">{item.icon}</span>
+                            </div>
+                            <div>
+                                <p className={`font-medium ${item.danger ? 'text-red-400 group-hover:text-red-300' : 'text-white'}`}>
+                                    {item.label}
+                                </p>
+                                {item.subNode
+                                    ? item.subNode
+                                    : item.sub && <p className="text-slate-400 text-xs">{item.sub}</p>
+                                }
+                            </div>
+                        </div>
+                        {!item.danger && (
+                            <span className="material-symbols-outlined text-slate-500 group-hover:text-white">chevron_right</span>
+                        )}
+                    </button>
+                ))}
+            </div>
+        </div>
+    )
+}
+
 export default function ProfilePage() {
-    const [editing, setEditing] = useState(false)
-    const [form, setForm] = useState({ name: 'Arjun Mehta', email: 'arjun.mehta@email.com', phone: '+91 98765 43210', dob: 'Apr 12, 1990' })
+    const navigate = useNavigate()
 
     return (
-        <div className="min-h-screen bg-background-dark text-slate-100 flex flex-col pb-32">
+        <div className="min-h-screen bg-background-dark text-slate-100 flex flex-col font-display antialiased overflow-x-hidden selection:bg-primary selection:text-white pb-32">
             <Header />
-            <main className="mx-auto w-full max-w-2xl px-4 pt-8 space-y-6">
-                {/* Avatar */}
-                <div className="flex flex-col items-center gap-4 py-4">
-                    <div className="relative">
-                        <img
-                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDleG16gFqC-iP0ymDrU_oL6sZKoL3OhPs-ub-MxgThoHT9ceIPiipeOC-iXaU_SjMolsAnHjfdH9e0dRZ7DIy6eho-cqPeVpbrFUNkyOyzdnk2QKG6tdzK0I9_z7iXKUc9M3r1SOce9A5wHn6Wiwq9vDJjuAYlosPd_-blLwwBIGnNmhBN30QfdaKEjkimWPA5TOf_kN1aWfgr1jNT9-rarv0BJIfnRKcrWf8rgJqEw2QiE1MtPXbIf6fOKkwapWnpvPlJ-W7ZiJWl"
-                            alt="Profile"
-                            className="size-24 rounded-full object-cover border-4 border-primary/30"
-                        />
-                        <button className="absolute bottom-0 right-0 size-8 bg-primary rounded-full flex items-center justify-center shadow-lg">
-                            <span className="material-symbols-outlined text-white text-[16px]">photo_camera</span>
+
+            <main className="flex-1 max-w-3xl mx-auto w-full p-4 md:p-8 pb-32">
+
+                {/* Profile Hero */}
+                <section className="flex flex-col items-center justify-center text-center mb-10 pt-4">
+                    <div className="relative mb-4">
+                        <div className="h-[72px] w-[72px] rounded-full bg-gradient-to-tr from-primary to-purple-600 p-[3px]">
+                            <img
+                                alt="Kumud Profile"
+                                className="h-full w-full rounded-full object-cover border-4 border-background-dark"
+                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDleG16gFqC-iP0ymDrU_oL6sZKoL3OhPs-ub-MxgThoHT9ceIPiipeOC-iXaU_SjMolsAnHjfdH9e0dRZ7DIy6eho-cqPeVpbrFUNkyOyzdnk2QKG6tdzK0I9_z7iXKUc9M3r1SOce9A5wHn6Wiwq9vDJjuAYlosPd_-blLwwBIGnNmhBN30QfdaKEjkimWPA5TOf_kN1aWfgr1jNT9-rarv0BJIfnRKcrWf8rgJqEw2QiE1MtPXbIf6fOKkwapWnpvPlJ-W7ZiJWl"
+                            />
+                        </div>
+                        <button className="absolute bottom-0 right-0 h-7 w-7 bg-surface-border hover:bg-primary text-white rounded-full flex items-center justify-center border-2 border-background-dark transition-colors">
+                            <span className="material-symbols-outlined text-[14px]">edit</span>
                         </button>
                     </div>
-                    <div className="text-center">
-                        <h1 className="text-xl font-bold text-white">{form.name}</h1>
-                        <p className="text-slate-500 text-sm">Policy holder since 2022</p>
-                    </div>
-                </div>
+                    <h2 className="text-3xl font-bold text-white mb-1">Kumud</h2>
+                    <p className="text-slate-400 text-sm mb-4">Member since 2021</p>
+                    <button className="text-primary hover:text-white text-sm font-medium transition-colors">
+                        Edit Profile
+                    </button>
+                </section>
 
-                {/* Details */}
-                <div className="rounded-2xl border border-surface-border bg-surface-dark-customer">
-                    <div className="flex items-center justify-between p-5 border-b border-surface-border">
-                        <h2 className="text-sm font-semibold text-white">Personal Information</h2>
-                        <button
-                            onClick={() => setEditing(!editing)}
-                            className="text-sm text-primary font-medium hover:underline"
-                        >{editing ? 'Save' : 'Edit'}</button>
-                    </div>
-                    <div className="divide-y divide-surface-border">
-                        {[
-                            { label: 'Full Name', field: 'name' },
-                            { label: 'Email', field: 'email' },
-                            { label: 'Phone', field: 'phone' },
-                            { label: 'Date of Birth', field: 'dob' },
-                        ].map((f) => (
-                            <div key={f.field} className="flex items-center justify-between px-5 py-4">
-                                <span className="text-sm text-slate-500 w-28 shrink-0">{f.label}</span>
-                                {editing ? (
-                                    <input
-                                        value={form[f.field]}
-                                        onChange={(e) => setForm({ ...form, [f.field]: e.target.value })}
-                                        className="flex-1 text-sm text-white bg-background-dark border border-surface-border rounded-lg px-3 py-1.5 outline-none focus:border-primary"
-                                    />
-                                ) : (
-                                    <span className="text-sm font-medium text-white">{form[f.field]}</span>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* More options */}
-                <div className="rounded-2xl border border-surface-border bg-surface-dark-customer divide-y divide-surface-border">
+                {/* Stats row */}
+                <section className="grid grid-cols-3 gap-4 mb-10">
                     {[
-                        { icon: 'security', label: 'Security & Privacy', color: 'text-blue-400' },
-                        { icon: 'notifications', label: 'Notifications', color: 'text-yellow-400' },
-                        { icon: 'help', label: 'Help & Support', color: 'text-slate-400' },
-                        { icon: 'logout', label: 'Sign Out', color: 'text-red-400' },
-                    ].map((item) => (
-                        <button key={item.label} className="w-full flex items-center gap-4 px-5 py-4 hover:bg-surface-border/30 transition-colors text-left">
-                            <span className={`material-symbols-outlined text-[22px] ${item.color}`}>{item.icon}</span>
-                            <span className="text-sm font-medium text-white flex-1">{item.label}</span>
-                            <span className="material-symbols-outlined text-slate-600 text-[18px]">chevron_right</span>
-                        </button>
+                        { value: '2', label: 'Policies', valueClass: 'text-white' },
+                        { value: '0', label: 'Claims', valueClass: 'text-white' },
+                        { value: '100%', label: 'Coverage', valueClass: 'text-emerald-400' },
+                    ].map((s) => (
+                        <div key={s.label} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-surface-dark-customer border border-surface-border">
+                            <span className={`text-2xl font-bold ${s.valueClass}`}>{s.value}</span>
+                            <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">{s.label}</span>
+                        </div>
                     ))}
+                </section>
+
+                {/* Menu groups */}
+                <div className="flex flex-col gap-8">
+                    <MenuGroup title="My Account" items={accountMenuItems} navigate={navigate} />
+                    <MenuGroup title="Claims & Policies" items={claimsMenuItems} navigate={navigate} />
+                    <MenuGroup
+                        title="Support"
+                        navigate={navigate}
+                        items={[
+                            { icon: 'help', label: 'Help Center', sub: 'FAQ, Contact Support', route: null },
+                            { icon: 'logout', label: 'Log Out', danger: true, route: '/' },
+                        ]}
+                    />
                 </div>
             </main>
+
             <BottomNav />
         </div>
     )
