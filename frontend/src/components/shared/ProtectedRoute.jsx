@@ -1,20 +1,28 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// PLACEHOLDER — Protected Route
-// Currently always renders children (no auth check).
-// Uncomment the redirect logic once Supabase auth is wired up.
-// ─────────────────────────────────────────────────────────────────────────────
 import { Navigate } from 'react-router-dom'
-// import { useAuth } from '../../contexts/AuthContext'
+import { useAuth } from '../../contexts/AuthContext'
 
 /**
- * @param {string} [requiredRole] - 'admin' | 'customer' | undefined (any auth)
+ * Blocks unauthenticated users and wrong-role users.
+ * @param {string} [requiredRole] - 'admin' | 'customer' | undefined (any authenticated user)
+ *
+ * Swap-in notes for Supabase:
+ *  - `loading` will be true while supabase.auth.getUser() is in flight → shows spinner
+ *  - `user` will be the Supabase User object
+ *  - `role` will come from user.user_metadata.role
  */
 const ProtectedRoute = ({ children, requiredRole }) => {
-    // TODO: Uncomment once AuthContext is wired to Supabase
-    // const { user, role, loading } = useAuth()
-    // if (loading) return <div className="min-h-screen bg-background-dark flex items-center justify-center text-white">Loading...</div>
-    // if (!user) return <Navigate to="/" replace />
-    // if (requiredRole && role !== requiredRole) return <Navigate to="/" replace />
+    const { user, role, loading } = useAuth()
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-[#0A0A0C] flex items-center justify-center">
+                <span className="material-symbols-outlined text-[#E83049] text-5xl animate-spin">progress_activity</span>
+            </div>
+        )
+    }
+
+    if (!user) return <Navigate to="/login" replace />
+    if (requiredRole && role !== requiredRole) return <Navigate to="/login" replace />
 
     return children
 }

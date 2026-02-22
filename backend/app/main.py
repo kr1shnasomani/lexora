@@ -10,6 +10,11 @@ from app.routes.claims import router as claims_router
 from app.routes.config import router as config_router
 from app.routes.audit import router as audit_router
 from app.routes.webhooks import router as webhooks_router
+from app.routes.user import router as user_router
+from app.routes.analytics import router as analytics_router
+from app.routes.network import router as network_router
+from app.routes.notifications import router as notifications_router
+
 
 app = FastAPI(title="Lexora API")
 
@@ -37,4 +42,9 @@ app.include_router(claims_router)
 app.include_router(config_router)
 app.include_router(audit_router)
 app.include_router(webhooks_router)
+app.include_router(user_router)
+app.include_router(analytics_router)
+app.include_router(network_router)
+app.include_router(notifications_router)
+
 

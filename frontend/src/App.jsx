@@ -4,6 +4,7 @@ import ProtectedRoute from './components/shared/ProtectedRoute'
 
 // Shared
 import ModeSelectionPage from './pages/ModeSelectionPage'
+import LoginPage from './pages/LoginPage'
 
 // Admin pages
 import DashboardPage from './pages/admin/DashboardPage'
@@ -36,6 +37,7 @@ export default function App() {
                 <Routes>
                     {/* ─── Landing ─────────────────────────────────── */}
                     <Route path="/" element={<ModeSelectionPage />} />
+                    <Route path="/login" element={<LoginPage />} />
 
                     {/* ─── Admin portal (/admin/*) ─────────────────── */}
                     <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><DashboardPage /></ProtectedRoute>} />
