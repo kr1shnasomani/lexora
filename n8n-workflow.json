@@ -1,0 +1,1130 @@
+{
+    "name": "Lexora Data Ingestion",
+    "nodes": [
+        {
+            "parameters": {
+                "url": "={{ $json.url }}",
+                "options": {
+                    "response": {
+                        "response": {
+                            "responseFormat": "file",
+                            "outputPropertyName": "file"
+                        }
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                480,
+                -184
+            ],
+            "id": "8f09c436-f79e-4af8-a694-eb407756b9f1",
+            "name": "Download File"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.groq.com/openai/v1/audio/transcriptions",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "contentType": "multipart-form-data",
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "parameterType": "formBinaryData",
+                            "name": "file",
+                            "inputDataFieldName": "data"
+                        },
+                        {
+                            "name": "model",
+                            "value": "whisper-large-v3-turbo"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                1152,
+                -96
+            ],
+            "id": "ef301d33-5b70-40e5-a1b1-488f26a481e7",
+            "name": "Audio Transcriber",
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "on5AKMxclN8eprNk",
+                    "name": "Groq Key"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://openrouter.ai/api/v1/chat/completions",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"google/gemma-3-12b-it\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"You are an insurance claim data extractor. Analyze this image. Extract these exact fields from the image content. Return ONLY valid JSON with no markdown, no preamble.\\n\\nRequired fields:\\n- policy_number (string)\\n- claimant_name (string)\\n- claimant_phone (string or null)\\n- incident_date (YYYY-MM-DD format)\\n- incident_type (one of: accident, illness, theft, damage, other)\\n- incident_description (string)\\n- claimed_amount (number, not string)\\n- provider_name (string or null)\\n- invoice_number (string or null)\\n\\nAlso include:\\n- field_confidence (object with confidence 0.0-1.0 for each field)\\n- warnings (array of strings for any issues, like blurry text or missing critical data)\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"{{$json.imageDataUrl}}\"\n          }\n        }\n      ]\n    }\n  ]\n}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                1376,
+                -288
+            ],
+            "id": "cf8800a2-64df-4860-806d-a6f5acf8d992",
+            "name": "Image Analysis",
+            "retryOnFail": true,
+            "maxTries": 2,
+            "credentials": {
+                "httpBearerAuth": {
+                    "id": "Y9kXIFt5oPloy9fU",
+                    "name": "Bearer Auth account"
+                },
+                "httpHeaderAuth": {
+                    "id": "byhVHDovoyzw1jgL",
+                    "name": "OpenRouter Key"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "45496ccc-edec-4ed6-bee7-a20ee2b667ac",
+                            "name": "=content",
+                            "value": "={{ $json.choices[0].message.content }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1600,
+                -288
+            ],
+            "id": "6e066730-6ff6-4fe1-b637-7fadeaaf38d2",
+            "name": "Normalize Output 1"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "fc2d6a76-4dad-409e-83b7-85c90203b3b7",
+                            "name": "content",
+                            "value": "={{ $json.choices[0].message.content }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1600,
+                -96
+            ],
+            "id": "a4675ea6-9e4a-4aa1-a55a-2c9fb217859a",
+            "name": "Normalize Output 2"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "74cf3996-1da5-4cfa-8a20-bb814724be34",
+                            "name": "content",
+                            "value": "={{ $json.content.parts[0].text }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1600,
+                96
+            ],
+            "id": "ff1eec0e-7e2f-417c-a27c-36161b4416a6",
+            "name": "Normalize Output 3"
+        },
+        {
+            "parameters": {
+                "resource": "video",
+                "operation": "analyze",
+                "modelId": {
+                    "__rl": true,
+                    "value": "models/gemini-2.5-flash-lite",
+                    "mode": "list",
+                    "cachedResultName": "models/gemini-2.5-flash-lite"
+                },
+                "text": "Analyze this insurance claim video. Extract these exact fields based on visual and audio context. Return ONLY valid JSON with no markdown, no preamble.\n\nRequired fields:\n- policy_number (string, if visible/stated)\n- claimant_name (string, if visible/stated)\n- claimant_phone (string or null)\n- incident_date (YYYY-MM-DD format, if visible/stated)\n- incident_type (one of: accident, illness, theft, damage, other)\n- incident_description (string, describe what occurred, visible damage, injuries, etc.)\n- claimed_amount (number, not string, if mentioned)\n- provider_name (string or null, e.g. hospital sign, repair shop)\n- invoice_number (string or null)\n\nAlso include:\n- field_confidence (object with confidence 0.0-1.0 for each field)\n- warnings (array of strings for any issues like poor lighting, unclear audio, or missing details)",
+                "videoUrls": "={{ $json.file_url }}",
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.googleGemini",
+            "typeVersion": 1.1,
+            "position": [
+                1376,
+                96
+            ],
+            "id": "2ff33002-c9f5-4f57-bb81-c4dca544ee09",
+            "name": "Analyze video",
+            "retryOnFail": true,
+            "maxTries": 2,
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "q011iMP38badmzYo",
+                    "name": "Google Gemini(PaLM) Api account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "pdf",
+                "binaryPropertyName": "file",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.extractFromFile",
+            "typeVersion": 1.1,
+            "position": [
+                1152,
+                288
+            ],
+            "id": "fcf2874e-f06e-471c-93c2-5ba6a95bcdf5",
+            "name": "Extract from File"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "c9850fee-aa01-4653-bf50-a3aa4e5432c1",
+                            "name": "content",
+                            "value": "={{ $json.choices[0].message.content }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1600,
+                288
+            ],
+            "id": "436afe81-dd5b-4695-b166-a08c23490f87",
+            "name": "Normalize Output 4"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://openrouter.ai/api/v1/chat/completions",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{\nJSON.stringify({\n  \"model\": \"google/gemma-3-12b-it\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"You are an insurance claim data extractor. Analyze this audio transcript. Extract these exact fields from the text below. Return ONLY valid JSON with no markdown, no preamble.\\n\\nRequired fields:\\n- policy_number (string)\\n- claimant_name (string)\\n- claimant_phone (string or null)\\n- incident_date (YYYY-MM-DD format)\\n- incident_type (one of: accident, illness, theft, damage, other)\\n- incident_description (string)\\n- claimed_amount (number, not string)\\n- provider_name (string or null)\\n- invoice_number (string or null)\\n\\nAlso include:\\n- field_confidence (object with confidence 0.0-1.0 for each field)\\n- warnings (array of strings for any issues or missing context in the transcript)\"\n        },\n        {\n          \"type\": \"text\",\n          \"text\": $json.text\n        }\n      ]\n    }\n  ]\n})\n}}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                1376,
+                -96
+            ],
+            "id": "85bbf9e2-1ce1-4c3c-969b-2ae1beb148b7",
+            "name": "Transcript Analysis",
+            "retryOnFail": true,
+            "maxTries": 2,
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "byhVHDovoyzw1jgL",
+                    "name": "OpenRouter Key"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://openrouter.ai/api/v1/chat/completions",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{\nJSON.stringify({\n  \"model\": \"google/gemma-3-12b-it\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"You are an insurance claim data extractor. Extract these exact fields from the document text below. Return ONLY valid JSON with no markdown, no preamble.\\n\\nRequired fields:\\n- policy_number (string)\\n- claimant_name (string)\\n- claimant_phone (string or null)\\n- incident_date (YYYY-MM-DD format)\\n- incident_type (one of: accident, illness, theft, damage, other)\\n- incident_description (string)\\n- claimed_amount (number, not string)\\n- provider_name (string or null)\\n- invoice_number (string or null)\\n\\nAlso include:\\n- field_confidence (object with confidence 0.0-1.0 for each field)\\n- warnings (array of strings for any anomalies or missing data)\"\n        },\n        {\n          \"type\": \"text\",\n          \"text\": $json.text\n        }\n      ]\n    }\n  ]\n})\n}}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                1376,
+                288
+            ],
+            "id": "aa3a4e9e-e982-4f89-a949-d182c3f22af5",
+            "name": "PDF Text Analysis",
+            "retryOnFail": true,
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "byhVHDovoyzw1jgL",
+                    "name": "OpenRouter Key"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "rules": {
+                    "values": [
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "7f3f7367-da9c-47b3-b1b1-98f111e36617",
+                                        "leftValue": "={{ $json.url }}",
+                                        "rightValue": "drive.google.com",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "contains"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "Google Drive"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "bc99660f-c732-4702-b3a7-048b5b82f47f",
+                                        "leftValue": "={{ $json.url }}",
+                                        "rightValue": "",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "notEmpty",
+                                            "singleValue": true
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "Web Link"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "leftValue": "={{ $binary.file.fileName }}",
+                                        "rightValue": "",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "notEmpty",
+                                            "singleValue": true
+                                        },
+                                        "id": "1a82a31d-f4c2-45d9-acfa-a92f9c8f94bf"
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "Local File"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3.4,
+            "position": [
+                32,
+                -128
+            ],
+            "id": "5052f108-f05d-4b84-97c5-7f40b3b78fa8",
+            "name": "Switch 1"
+        },
+        {
+            "parameters": {
+                "jsCode": "const url = $input.first().json.url;\nlet downloadUrl = url;\n\nif (url.includes('drive.google.com')) {\n  const id = url.split('/d/')[1].split('/')[0];\n  downloadUrl = `https://drive.google.com/uc?export=download&id=${id}`;\n}\n\nreturn { json: { url: downloadUrl } };"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                256,
+                -256
+            ],
+            "id": "461662ce-8c57-46c7-b1b2-e38348b42bdf",
+            "name": "Google Drive"
+        },
+        {
+            "parameters": {
+                "rules": {
+                    "values": [
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "leftValue": "={{ $binary.file.mimeType }}",
+                                        "rightValue": "image",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "contains"
+                                        },
+                                        "id": "2568e1ee-bb7b-43fd-91a6-f622386eea50"
+                                    }
+                                ],
+                                "combinator": "and"
+                            }
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "9f3b928c-b4ce-4866-9389-4b59a4264839",
+                                        "leftValue": "={{ $binary.file.mimeType }}",
+                                        "rightValue": "audio",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "contains"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            }
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "79457131-7a18-47df-b05c-5e4b2cbcfada",
+                                        "leftValue": "={{ $binary.file.mimeType }}",
+                                        "rightValue": "video",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "contains"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            }
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "ad59eaaa-b057-428d-8d45-7ed200bb8990",
+                                        "leftValue": "={{ $binary.file.fileExtension }}",
+                                        "rightValue": "pdf",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            }
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3.4,
+            "position": [
+                928,
+                -32
+            ],
+            "id": "ed3eef19-b3dd-4374-9f32-96e9f8110eb5",
+            "name": "Switch 2"
+        },
+        {
+            "parameters": {},
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 3.2,
+            "position": [
+                704,
+                -112
+            ],
+            "id": "bb7cb6b7-0e64-4673-b3da-eaaa1584da7a",
+            "name": "Merge 1"
+        },
+        {
+            "parameters": {
+                "numberInputs": 4
+            },
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 3.2,
+            "position": [
+                1824,
+                64
+            ],
+            "id": "b1e973f0-4819-4a82-832e-f22ff25782ae",
+            "name": "Merge 2"
+        },
+        {
+            "parameters": {
+                "jsCode": "const binaries = Object.values($binary);\n\nreturn binaries.map(file => ({\n  json: {\n    url: $json.url || \"\"\n  },\n  binary: {\n    file\n  }\n}));"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -192,
+                -112
+            ],
+            "id": "c2098de4-7871-43ff-8af5-5a0188787bee",
+            "name": "Code in JavaScript"
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\n\nfor (let i = 0; i < items.length; i++) {\n  // Read the raw file from n8n's storage\n  const buffer = await this.helpers.getBinaryDataBuffer(i, 'file');\n\n  // Create the Base64 string and save it as 'imageDataUrl'\n  items[i].json.imageDataUrl = `data:${items[i].binary.file.mimeType};base64,${buffer.toString('base64')}`;\n}\n\nreturn items;"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1152,
+                -288
+            ],
+            "id": "6a69e776-e656-44bd-be2d-b2a053f931ba",
+            "name": "Code in JavaScript1"
+        },
+        {
+            "parameters": {
+                "formTitle": "Medical Upload",
+                "formFields": {
+                    "values": [
+                        {
+                            "fieldLabel": "url"
+                        },
+                        {
+                            "fieldLabel": "file",
+                            "fieldType": "file"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.formTrigger",
+            "typeVersion": 2.5,
+            "position": [
+                -416,
+                -112
+            ],
+            "id": "3c5361ed-9513-4fa0-ac6d-95ad2b6a4c3b",
+            "name": "File Upload",
+            "webhookId": "5a5ef743-079d-4baf-94f7-a8f1596db000"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "=https://REDACTED_PROJECT_REF.supabase.co/storage/v1/object//claim_documents/{{ $execution.id }}/{{ encodeURIComponent($binary.file.fileName) }}",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer REDACTED_SERVICE_ROLE_KEY"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "={{ $binary.file.mimeType }}"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "binaryData",
+                "inputDataFieldName": "=file",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                928,
+                -224
+            ],
+            "id": "a6b3bf83-2aab-4201-a8dc-c14e3053d5b8",
+            "name": "Supabase Storage S3"
+        },
+        {
+            "parameters": {
+                "tableId": "claims",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "claim_number",
+                            "fieldValue": "=CLM-{{ $now.toFormat('yyyyMMddHHmmss') }}"
+                        },
+                        {
+                            "fieldId": "idempotency_key",
+                            "fieldValue": "={{ $execution.id }}"
+                        },
+                        {
+                            "fieldId": "status",
+                            "fieldValue": "extracted"
+                        },
+                        {
+                            "fieldId": "policy_id",
+                            "fieldValue": "807d584e-d36e-49d0-92a6-b775986f2dc9"
+                        },
+                        {
+                            "fieldId": "claimant_name",
+                            "fieldValue": "={{ JSON.parse($json.content.replace(/```json/g, '').replace(/```/g, '').trim()).claimant_name }}"
+                        },
+                        {
+                            "fieldId": "claimant_phone",
+                            "fieldValue": "={{ JSON.parse($json.content.replace(/```json/g, '').replace(/```/g, '').trim()).claimant_phone }}"
+                        },
+                        {
+                            "fieldId": "incident_date",
+                            "fieldValue": "={{ JSON.parse($json.content.replace(/```json/g, '').replace(/```/g, '').trim()).incident_date }}"
+                        },
+                        {
+                            "fieldId": "incident_type",
+                            "fieldValue": "={{ JSON.parse($json.content.replace(/```json/g, '').replace(/```/g, '').trim()).incident_type }}"
+                        },
+                        {
+                            "fieldId": "incident_description",
+                            "fieldValue": "={{ JSON.parse($json.content.replace(/```json/g, '').replace(/```/g, '').trim()).incident_description }}"
+                        },
+                        {
+                            "fieldId": "claimed_amount",
+                            "fieldValue": "={{ JSON.parse($json.content.replace(/```json/g, '').replace(/```/g, '').trim()).claimed_amount }}"
+                        },
+                        {
+                            "fieldId": "provider_name",
+                            "fieldValue": "={{ JSON.parse($json.content.replace(/```json/g, '').replace(/```/g, '').trim()).provider_name }}"
+                        },
+                        {
+                            "fieldId": "invoice_number",
+                            "fieldValue": "={{ JSON.parse($json.content.replace(/```json/g, '').replace(/```/g, '').trim()).invoice_number }}"
+                        },
+                        {
+                            "fieldId": "extraction_raw",
+                            "fieldValue": "={{ JSON.parse($json.content.replace(/```json/g, '').replace(/```/g, '').trim()) }}"
+                        },
+                        {
+                            "fieldId": "extraction_confidence",
+                            "fieldValue": "={{ JSON.parse($json.content).overall_confidence }}"
+                        },
+                        {
+                            "fieldId": "extraction_warnings",
+                            "fieldValue": "={{ JSON.parse($json.content).validation_errors }}"
+                        },
+                        {
+                            "fieldId": "status",
+                            "fieldValue": "={{ JSON.parse($json.content).needs_review ? 'under_review' : 'extracted' }}"
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                2496,
+                96
+            ],
+            "id": "b13ba917-8d91-4810-82f5-414e5ad2c619",
+            "name": "Supabase: claims",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "PUicmWoK6FjwpQcO",
+                    "name": "Supabase account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "tableId": "claim_documents",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "claim_id",
+                            "fieldValue": "={{ $json.claim_id }}"
+                        },
+                        {
+                            "fieldId": "storage_provider",
+                            "fieldValue": "supabase"
+                        },
+                        {
+                            "fieldId": "storage_key",
+                            "fieldValue": "={{ $execution.id }}/{{ $json.file_name }}"
+                        },
+                        {
+                            "fieldId": "file_name",
+                            "fieldValue": "={{ $json.file_name }}"
+                        },
+                        {
+                            "fieldId": "content_type",
+                            "fieldValue": "={{ $json.mime_type }}"
+                        },
+                        {
+                            "fieldId": "sha256",
+                            "fieldValue": "={{ $json.sha256_hash }}"
+                        },
+                        {
+                            "fieldId": "size_bytes",
+                            "fieldValue": "={{ $json.size_bytes }}"
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                3168,
+                96
+            ],
+            "id": "0a74178f-eab4-416f-b087-07f6f5f960b7",
+            "name": "Supabase: claim_documents",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "PUicmWoK6FjwpQcO",
+                    "name": "Supabase account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nlet masterClaim = {};\nlet aiFailed = false;\n\nfor (const item of items) {\n  try {\n    const data = JSON.parse(item.json.content.replace(/```json/g, '').replace(/```/g, '').trim());\n    masterClaim = { ...masterClaim, ...data };\n  } catch (e) {\n    // If the AI spits out garbage, we catch it here!\n    aiFailed = true; \n  }\n}\n\n// Pass the failure flag forward so Quality Control knows\nmasterClaim.ai_parsing_failed = aiFailed;\n\nreturn [{\n  json: { content: JSON.stringify(masterClaim) }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2048,
+                96
+            ],
+            "id": "d36d282d-2ee4-47d4-9e51-1df9cd4ce071",
+            "name": "Bundle Claim Data"
+        },
+        {
+            "parameters": {
+                "jsCode": "const originalFiles = $('Merge 1').all();\nconst newClaimId = $input.first().json.id;\n\nreturn originalFiles.map(file => {\n  // Grab the string size and convert it to raw bytes safely\n  let rawSize = file.binary.file.fileSize || \"1024\";\n  let bytes = Math.round(parseFloat(rawSize) * (String(rawSize).includes('MB') ? 1048576 : (String(rawSize).includes('kB') ? 1024 : 1)));\n\n  return {\n    json: {\n      claim_id: newClaimId,\n      file_name: file.binary.file.fileName,\n      mime_type: file.binary.file.mimeType,\n      size_bytes: bytes\n    },\n    binary: file.binary\n  };\n});"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2720,
+                96
+            ],
+            "id": "a7b2b23a-3d3e-465c-b742-0043a49badba",
+            "name": "Link Files to Claim"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Read the bundled claim data\nlet data = JSON.parse($input.first().json.content);\n\n// --- 1. SCHEMA VALIDATION ---\nconst required = ['policy_number', 'claimant_name', 'incident_date', 'incident_type', 'incident_description', 'claimed_amount'];\nconst missing = required.filter(field => !data[field]);\nconst errors = [];\n\nif (data.claimed_amount && typeof data.claimed_amount !== 'number') errors.push('claimed_amount must be a number');\nif (data.incident_date && !/^\\d{4}-\\d{2}-\\d{2}$/.test(data.incident_date)) errors.push('invalid date format');\n\n// --- 2. CONFIDENCE CALCULATION ---\nconst confidences = data.field_confidence || {};\nconst critical = ['policy_number', 'claimant_name', 'incident_date', 'claimed_amount'];\n\nlet critSum = 0, nonCritSum = 0, critCount = 0, nonCritCount = 0;\n\nObject.keys(confidences).forEach(key => {\n  if (critical.includes(key)) { critSum += confidences[key]; critCount++; }\n  else { nonCritSum += confidences[key]; nonCritCount++; }\n});\n\nconst avgCritical = critCount > 0 ? (critSum / critCount) : 0;\nconst avgNonCritical = nonCritCount > 0 ? (nonCritSum / nonCritCount) : 0;\nconst overallConfidence = (0.7 * avgCritical) + (0.3 * avgNonCritical);\n\n// --- 3. FINAL VERDICT ---\ndata.overall_confidence = overallConfidence;\ndata.validation_errors = errors;\ndata.missing_fields = missing;\n\n// If confidence is low, fields are missing, OR the AI returned bad JSON, flag it\ndata.needs_review = data.ai_parsing_failed || overallConfidence < 0.85 || missing.length > 0 || errors.length > 0;\n\n// Pass it forward as a string so your Supabase node doesn't break\nreturn [{\n  json: {\n    content: JSON.stringify(data)\n  }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2272,
+                96
+            ],
+            "id": "763d0ca0-8848-4454-a519-3badc134299c",
+            "name": "Quality Control"
+        },
+        {
+            "parameters": {
+                "type": "SHA256",
+                "binaryData": true,
+                "binaryPropertyName": "file",
+                "dataPropertyName": "sha256_hash"
+            },
+            "type": "n8n-nodes-base.crypto",
+            "typeVersion": 1,
+            "position": [
+                2944,
+                96
+            ],
+            "id": "9f1e2de5-7ef8-4631-a005-8c1990d74605",
+            "name": "Crypto"
+        }
+    ],
+    "pinData": {},
+    "connections": {
+        "Download File": {
+            "main": [
+                [
+                    {
+                        "node": "Merge 1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Audio Transcriber": {
+            "main": [
+                [
+                    {
+                        "node": "Transcript Analysis",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Image Analysis": {
+            "main": [
+                [
+                    {
+                        "node": "Normalize Output 1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Normalize Output 1": {
+            "main": [
+                [
+                    {
+                        "node": "Merge 2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Normalize Output 2": {
+            "main": [
+                [
+                    {
+                        "node": "Merge 2",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Normalize Output 3": {
+            "main": [
+                [
+                    {
+                        "node": "Merge 2",
+                        "type": "main",
+                        "index": 2
+                    }
+                ]
+            ]
+        },
+        "Analyze video": {
+            "main": [
+                [
+                    {
+                        "node": "Normalize Output 3",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extract from File": {
+            "main": [
+                [
+                    {
+                        "node": "PDF Text Analysis",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Normalize Output 4": {
+            "main": [
+                [
+                    {
+                        "node": "Merge 2",
+                        "type": "main",
+                        "index": 3
+                    }
+                ]
+            ]
+        },
+        "Transcript Analysis": {
+            "main": [
+                [
+                    {
+                        "node": "Normalize Output 2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "PDF Text Analysis": {
+            "main": [
+                [
+                    {
+                        "node": "Normalize Output 4",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Switch 1": {
+            "main": [
+                [
+                    {
+                        "node": "Google Drive",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Download File",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Merge 1",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Google Drive": {
+            "main": [
+                [
+                    {
+                        "node": "Download File",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Switch 2": {
+            "main": [
+                [
+                    {
+                        "node": "Code in JavaScript1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Audio Transcriber",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Analyze video",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Extract from File",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Merge 1": {
+            "main": [
+                [
+                    {
+                        "node": "Supabase Storage S3",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Switch 2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Merge 2": {
+            "main": [
+                [
+                    {
+                        "node": "Bundle Claim Data",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code in JavaScript": {
+            "main": [
+                [
+                    {
+                        "node": "Switch 1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code in JavaScript1": {
+            "main": [
+                [
+                    {
+                        "node": "Image Analysis",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "File Upload": {
+            "main": [
+                [
+                    {
+                        "node": "Code in JavaScript",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Supabase Storage S3": {
+            "main": [
+                []
+            ]
+        },
+        "Supabase: claims": {
+            "main": [
+                [
+                    {
+                        "node": "Link Files to Claim",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Bundle Claim Data": {
+            "main": [
+                [
+                    {
+                        "node": "Quality Control",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Link Files to Claim": {
+            "main": [
+                [
+                    {
+                        "node": "Crypto",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Supabase: claim_documents": {
+            "main": [
+                []
+            ]
+        },
+        "Quality Control": {
+            "main": [
+                [
+                    {
+                        "node": "Supabase: claims",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Crypto": {
+            "main": [
+                [
+                    {
+                        "node": "Supabase: claim_documents",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": false,
+    "settings": {
+        "executionOrder": "v1",
+        "availableInMCP": false,
+        "timeSavedMode": "fixed",
+        "timezone": "Asia/Kolkata",
+        "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "4d26bc5c-e0a2-4353-a050-df29f8217e6e",
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "4f1e427b282371d32fa46454864796f49434b405cfa93f59698532fbfbd9081b"
+    },
+    "id": "DXc1hNFxxRl7k906",
+    "tags": []
+}
