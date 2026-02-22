@@ -115,7 +115,7 @@ def evaluate_policy(claim_id: str) -> dict:
             })
         else:
             # Run core checks
-            check_results = _run_core_checks(claim, policy, category_config, context)
+            check_results = _run_core_checks(claim, policy, category_config, context, rulepack)
             for cr in check_results:
                 _record_result(cr, cr["code"], passed_ids, failed_ids, flagged_ids, reasons)
                 if not cr["passed"] and cr["severity"] == "reject":
@@ -187,6 +187,81 @@ def _load_documents(db, claim_id: str) -> list[dict]:
 # Ruleset Selection (effective-date-aware)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _normalize_rulepack(raw: dict) -> dict:
+    """Translate the DB rules_definition JSONB schema into the internal engine format.
+
+    DB format (actual):
+        coverage.incident_type_to_category  → category_mapping
+        financials.copay_percent.{cat}       → coverage_categories.{cat}.copay_percentage
+        financials.annual_limit.{cat}        → coverage_categories.{cat}.annual_limit
+        financials.per_incident_limit.{cat}  → coverage_categories.{cat}.per_incident_limit
+        financials.deductible.{cat}          → coverage_categories.{cat}.deductible
+        eligibility.waiting_period_days.{cat}→ coverage_categories.{cat}.waiting_period_days
+        exclusions.hard[].keywords           → coverage_categories.{cat}.exclusions
+    """
+    # If already in legacy format (has coverage_categories key), pass through
+    if "coverage_categories" in raw:
+        if "category_mapping" not in raw and "category_mapping" not in raw:
+            raw.setdefault("category_mapping", {})
+        return raw
+
+    cov = raw.get("coverage", {})
+    fin = raw.get("financials", {})
+    elig = raw.get("eligibility", {})
+    excl = raw.get("exclusions", {})
+
+    # Build category_mapping from coverage.incident_type_to_category
+    category_mapping = cov.get("incident_type_to_category", {})
+    supported = cov.get("supported_categories", [])
+
+    # Gather all exclusion keywords across hard exclusions
+    hard_excl_keywords: list[str] = []
+    for rule in excl.get("hard", []):
+        hard_excl_keywords.extend(rule.get("keywords", []))
+    soft_excl_flags: list[dict] = excl.get("soft", [])
+
+    coverage_categories: dict = {}
+    contestability_days = elig.get("contestability_days", 0) or 0
+    max_submission_days = elig.get("max_submission_days_from_incident", 365) or 365
+
+    # high_amount_threshold: pull from routing config or rules list
+    routing = raw.get("routing", {})
+    high_amount_threshold = routing.get("fast_track", {}).get("max_amount", 0) or 0
+    # Also try to pull from amount_outlier_review rule params
+    for rule in raw.get("rules", []):
+        if rule.get("type") == "amount_outlier_review":
+            high_amount_threshold = rule.get("params", {}).get("high_amount_threshold", high_amount_threshold)
+
+    for cat in (supported or list({v for v in category_mapping.values() if v})):
+        copay_pct = fin.get("copay_percent", {}).get(cat, 0) or 0
+        annual_lim = fin.get("annual_limit", {}).get(cat)  # None means unlimited
+        per_inc_lim = fin.get("per_incident_limit", {}).get(cat)
+        deductible = fin.get("deductible", {}).get(cat, 0) or 0
+        waiting = elig.get("waiting_period_days", {}).get(cat, 0) or 0
+
+        coverage_categories[cat] = {
+            "covered": True,
+            "copay_percentage": float(copay_pct),
+            "annual_limit": float(annual_lim) if annual_lim is not None else 0.0,
+            "per_incident_limit": float(per_inc_lim) if per_inc_lim is not None else 0.0,
+            "deductible": float(deductible),
+            "waiting_period_days": int(waiting),
+            "contestability_days": int(contestability_days),
+            "max_submission_days_from_incident": int(max_submission_days),
+            "high_amount_threshold": float(high_amount_threshold) if high_amount_threshold else 0.0,
+            # Exclusion keyword lists for hard-reject checks
+            "exclusions": hard_excl_keywords,
+            # Full soft-exclusion rule objects for review routing
+            "soft_exclusion_rules": soft_excl_flags,
+        }
+
+    return {
+        **raw,  # preserve all original keys (rules[], routing, documents, etc.)
+        "category_mapping": category_mapping,
+        "coverage_categories": coverage_categories,
+    }
+
+
 def _select_ruleset(db, policy: dict, claim: dict) -> tuple[dict | None, dict]:
     """Select the correct ruleset using effective dates.
 
@@ -221,7 +296,9 @@ def _select_ruleset(db, policy: dict, claim: dict) -> tuple[dict | None, dict]:
         rules_def = row.get("rules_definition") or {}
         if isinstance(rules_def, str):
             rules_def = json.loads(rules_def)
-        return row, rules_def
+        # Normalize DB schema → internal engine schema
+        normalized = _normalize_rulepack(rules_def)
+        return row, normalized
 
     return None, {}
 
@@ -302,8 +379,10 @@ def _run_core_checks(
     policy: dict,
     category_config: dict,
     context: dict,
+    rulepack: dict | None = None,
 ) -> list[dict]:
     """Run all deterministic checks against the claim. Returns list of result dicts."""
+    rulepack = rulepack or {}
     results: list[dict] = []
 
     # 1) Policy active
@@ -353,23 +432,120 @@ def _run_core_checks(
     elif waiting_days == 0:
         results.append(_ok("WAITING_PERIOD_NA", "No waiting period for this category."))
 
-    # 5) Exclusions (keyword scan against incident_description)
+    # 5a) Hard exclusions (reject) — keyword scan against incident_description
     description = str(
         claim.get("incident_description") or claim.get("description") or ""
     ).lower()
-    exclusions = category_config.get("exclusions", [])
+    hard_exclusions = category_config.get("exclusions", [])
 
-    exclusion_hit = False
-    for kw in exclusions:
+    hard_hit = False
+    for kw in hard_exclusions:
         kw_lower = str(kw).lower().replace("_", " ")
         if kw_lower in description:
             results.append(_fail("EXCLUSION_MATCH",
-                                 f"Exclusion keyword '{kw}' matched in incident description."))
-            exclusion_hit = True
-            break
+                                 f"Hard exclusion keyword '{kw}' matched — claim is not covered."))
+            hard_hit = True
+            break  # one hard exclusion is enough to reject
 
-    if not exclusion_hit and exclusions:
-        results.append(_ok("NO_EXCLUSION_MATCH", "No exclusion keywords matched."))
+    if not hard_hit and hard_exclusions:
+        results.append(_ok("NO_EXCLUSION_MATCH", "No hard exclusion keywords matched."))
+
+    # 5b) Soft exclusions (review) — flag for adjudicator without rejecting
+    soft_rules = category_config.get("soft_exclusion_rules", [])
+    for soft_rule in soft_rules:
+        rule_id = soft_rule.get("rule_id", "SOFT_EXCL")
+        msg = soft_rule.get("message", "Soft exclusion condition detected.")
+        keywords = soft_rule.get("keywords", [])
+        for kw in keywords:
+            if str(kw).lower().replace("_", " ") in description:
+                results.append(_review(rule_id, msg))
+                break  # one match per rule is enough
+
+    # 6) Contestability check (life policies)
+    contestability_days = category_config.get("contestability_days", 0)
+    if contestability_days and start and incident:
+        contestability_end = start + timedelta(days=contestability_days)
+        if incident <= contestability_end:
+            results.append(_review(
+                "CONTESTABILITY_PERIOD",
+                f"Claim falls within {contestability_days}-day contestability window "
+                f"(policy started {start}, contestability ends {contestability_end}). "
+                "Route for manual underwriter verification."
+            ))
+
+    # 7) Late submission check
+    max_submission_days = category_config.get("max_submission_days_from_incident", 365)
+    submitted_str = claim.get("submitted_at") or claim.get("created_at")
+    if incident and submitted_str and max_submission_days:
+        submitted = _parse_date(str(submitted_str)[:10])
+        if submitted and incident:
+            days_elapsed = (submitted - incident).days
+            if days_elapsed > max_submission_days:
+                results.append(_fail(
+                    "SUBMISSION_TOO_LATE",
+                    f"Claim submitted {days_elapsed} days after incident date. "
+                    f"Maximum allowed: {max_submission_days} days."
+                ))
+            elif days_elapsed < 0:
+                results.append(_review(
+                    "SUBMISSION_DATE_ANOMALY",
+                    f"Submission date {submitted} appears to be before incident date {incident}."
+                ))
+
+    # 8) High-amount review threshold (from rulepack routing config)
+    high_amount_threshold = category_config.get("high_amount_threshold", 0)
+    claimed = float(claim.get("claimed_amount") or 0)
+    if high_amount_threshold and claimed > high_amount_threshold:
+        results.append(_review(
+            "HIGH_AMOUNT_REVIEW",
+            f"Claimed amount ₹{claimed:,.2f} exceeds high-amount review threshold "
+            f"₹{high_amount_threshold:,.2f}. Requires adjudicator sign-off."
+        ))
+
+    # 9) Required documents check (R_REQUIRED_DOCS)
+    docs_config = rulepack.get("documents", {})
+    coverage_category = context.get("coverage_category", "")
+    required_doc_types: list[str] = (
+        docs_config.get("required_by_category", {}).get(coverage_category, [])
+    )
+    filename_hints: dict[str, list[str]] = docs_config.get("filename_hints", {})
+    uploaded_docs: list[dict] = context.get("documents", [])
+
+    # Build a flat set of uploaded filenames/doc_types for matching
+    uploaded_names: list[str] = []
+    for d in uploaded_docs:
+        fname = (d.get("file_name") or d.get("filename") or d.get("name") or "").lower()
+        doc_type = (d.get("document_type") or d.get("doc_type") or "").lower()
+        if fname:
+            uploaded_names.append(fname)
+        if doc_type:
+            uploaded_names.append(doc_type)
+
+    missing_docs: list[str] = []
+    for req_doc in required_doc_types:
+        # Check if any uploaded file matches the required doc type
+        hints = filename_hints.get(req_doc, [req_doc.replace("_", " ")])
+        matched = any(
+            any(h.lower() in name for h in hints)
+            for name in uploaded_names
+        )
+        if not matched:
+            missing_docs.append(req_doc)
+
+    if missing_docs:
+        for md in missing_docs:
+            results.append(_review(
+                "MISSING_REQUIRED_DOC",
+                f"Required document '{md.replace('_', ' ')}' not found in uploaded files. "
+                f"Please submit: {', '.join(h for h in filename_hints.get(md, [md])[:3])}."
+            ))
+        context["doc_gaps_count"] = len(missing_docs)
+    elif required_doc_types:
+        results.append(_ok(
+            "REQUIRED_DOCS_PRESENT",
+            f"All {len(required_doc_types)} required document(s) for category "
+            f"'{coverage_category}' are present."
+        ))
 
     return results
 
