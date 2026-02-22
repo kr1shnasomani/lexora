@@ -5,6 +5,7 @@ import BottomNav from '../../components/customer/BottomNav'
 import { useFetch } from '../../hooks/useFetch'
 import { SkeletonPolicyCard } from '../../components/shared/Skeleton'
 import ErrorToast from '../../components/shared/ErrorToast'
+import { useAuth } from '../../contexts/AuthContext'
 
 const FILTERS = ['All', 'Active', 'Expired', 'Health', 'Auto']
 
@@ -14,13 +15,16 @@ const policyAccentBg = (type) => ({ health: 'bg-primary/10 text-primary border-p
 
 export default function PoliciesPage() {
     const navigate = useNavigate()
+    const { user } = useAuth()
     const [activeFilter, setActiveFilter] = useState('All')
     const [toastError, setToastError] = useState(null)
 
-    const { data, loading, error } = useFetch('/api/policies', 60_000)
+    const policiesUrl = user?.email ? `/api/customer/policies?email=${encodeURIComponent(user.email)}` : null
+    const { data, loading, error } = useFetch(policiesUrl)
+
     if (error && !toastError) setToastError(error)
 
-    const all = data?.items || []
+    const all = data?.policies || []
     const filtered = all.filter(p => {
         if (activeFilter === 'All') return true
         if (activeFilter === 'Active') return p.status === 'active'
@@ -86,7 +90,9 @@ export default function PoliciesPage() {
                                                 {p.coverage_amount && <div><p className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-bold">Coverage</p><p className="text-white text-lg font-medium">{p.coverage_amount}</p></div>}
                                                 {p.premium && <div><p className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-bold">Premium</p><p className="text-white text-lg font-medium">{p.premium}<span className="text-xs text-slate-500">{p.premium_suffix}</span></p></div>}
                                                 {p.renewal_date && <div className="hidden sm:block"><p className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-bold">Renewal</p><p className="text-white text-lg font-medium">{p.renewal_date}</p></div>}
-                                                {p.extra_stats?.vehicle && <div><p className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-bold">Vehicle</p><p className="text-white text-lg font-medium">{p.extra_stats.vehicle}</p></div>}
+                                                {p.extra_stats && Object.entries(p.extra_stats).map(([k, v]) => (
+                                                    <div key={k}><p className="text-xs text-slate-500 uppercase tracking-wider mb-1.5 font-bold">{k}</p><p className="text-white text-lg font-medium">{v}</p></div>
+                                                ))}
                                             </div>
                                             <div className="flex flex-wrap gap-3 mt-auto">
                                                 <button onClick={() => navigate(`/customer/policy-detail?id=${p.id}`)} className="flex-1 bg-white hover:bg-slate-200 text-surface-dark-customer font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2">

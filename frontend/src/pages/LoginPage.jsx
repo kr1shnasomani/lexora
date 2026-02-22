@@ -3,15 +3,8 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 /* ─── Demo credentials ────────────────────────────────────────────────────────
-   Any of these emails will be accepted without a real OTP.
-   The OTP box will accept any 6-digit code in demo mode.
-   Replace with real Supabase OTP calls when auth is wired.
+   The OTP verification step accepts any 6-digit code or DEMO_OTP.
 ──────────────────────────────────────────────────────────────────────────────*/
-const DEMO_ACCOUNTS = {
-    'customer@lexora.demo': { role: 'customer', name: 'Kumud Sharma' },
-    'admin@lexora.demo': { role: 'admin', name: 'Admin User' },
-    'demo@lexora.com': { role: 'customer', name: 'Demo User' },
-}
 const DEMO_OTP = '123456'
 
 /* ─── Logo ───────────────────────────────────────────────────────────────────*/
@@ -128,6 +121,7 @@ export default function LoginPage() {
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
     const [countdown, setCountdown] = useState(30)
+    const [validatedUser, setValidatedUser] = useState(null)
 
     // Resend countdown timer for step 2
     useEffect(() => {
@@ -145,17 +139,31 @@ export default function LoginPage() {
         const trimmed = email.trim().toLowerCase()
         if (!trimmed) { setError('Please enter your email address.'); return }
 
-        // Check against demo accounts
-        if (!DEMO_ACCOUNTS[trimmed]) {
-            setError(`No account found. Try: customer@lexora.demo or admin@lexora.demo`)
-            return
-        }
-
         setLoading(true)
-        // Simulate "sending OTP" delay
-        await new Promise(r => setTimeout(r, 600))
-        setLoading(false)
-        setStep(2)
+        try {
+            const res = await fetch('/api/auth/verify-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: trimmed })
+            })
+
+            if (!res.ok) throw new Error('Failed to verify email.')
+
+            const data = await res.json()
+
+            if (!data.exists) {
+                setLoading(false)
+                setError(`No account found under that email.`)
+                return
+            }
+
+            setValidatedUser({ email: trimmed, role: data.role, name: data.name })
+            setLoading(false)
+            setStep(2)
+        } catch (err) {
+            setLoading(false)
+            setError('Could not connect to the authentication server.')
+        }
     }
 
     /* Step 2 — OTP verification */
@@ -165,9 +173,6 @@ export default function LoginPage() {
         const code = otp.replace(/\s/g, '')
 
         if (code.length !== 6) { setError('Please enter all 6 digits.'); return }
-
-        const trimmedEmail = email.trim().toLowerCase()
-        const account = DEMO_ACCOUNTS[trimmedEmail]
 
         setLoading(true)
         await new Promise(r => setTimeout(r, 700))
@@ -180,12 +185,18 @@ export default function LoginPage() {
             return
         }
 
+        if (!validatedUser) {
+            setLoading(false)
+            setError('Session expired. Please restart login.')
+            return
+        }
+
         // Set auth in context
-        await signIn({ email: trimmedEmail, role: account.role, name: account.name })
+        await signIn({ email: validatedUser.email, role: validatedUser.role, name: validatedUser.name })
         setLoading(false)
 
         // Navigate based on role
-        navigate(account.role === 'admin' ? '/admin/dashboard' : '/customer', { replace: true })
+        navigate(validatedUser.role === 'admin' ? '/admin/dashboard' : '/customer', { replace: true })
     }
 
     return (
@@ -227,9 +238,9 @@ export default function LoginPage() {
                                     </div>
                                     {/* Demo hint */}
                                     <p className="text-[11px] text-gray-600 mt-1">
-                                        Demo: <button type="button" onClick={() => setEmail('customer@lexora.demo')} className="text-[#E83049]/70 hover:text-[#E83049] underline underline-offset-2">customer@lexora.demo</button>
-                                        {' · '}
-                                        <button type="button" onClick={() => setEmail('admin@lexora.demo')} className="text-[#E83049]/70 hover:text-[#E83049] underline underline-offset-2">admin@lexora.demo</button>
+                                        Demo: <button type="button" onClick={() => setEmail('admin@lexora.test')} className="text-[#E83049]/70 hover:text-[#E83049] underline underline-offset-2">admin@lexora.test</button>
+                                        {' '}·{' '}
+                                        <button type="button" onClick={() => setEmail('asha@lexora.test')} className="text-[#E83049]/70 hover:text-[#E83049] underline underline-offset-2">asha@lexora.test</button>
                                     </p>
                                 </div>
 
@@ -285,7 +296,7 @@ export default function LoginPage() {
                                 </button>
 
                                 <div className="text-center">
-                                    <button type="button" onClick={() => { setStep(1); setOtp(''); setError('') }}
+                                    <button type="button" onClick={() => { setStep(1); setOtp(''); setError(''); setValidatedUser(null) }}
                                         className="inline-flex items-center gap-1 text-sm text-[#9CA3AF] hover:text-white transition-colors">
                                         <span className="material-symbols-outlined text-base">arrow_back</span>Back to Email
                                     </button>
