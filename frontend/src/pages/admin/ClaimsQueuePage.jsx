@@ -131,7 +131,40 @@ export default function ClaimsQueuePage() {
 
     // Live fetch — refresh every 15s
     const { data, loading, error, refetch } = useFetch('/api/claims?page_size=50', 15_000)
-    const liveClaims = data?.items || []
+
+    // Transform backend data to match the UI shape
+    const liveClaims = (data?.items || []).map(c => {
+        const aiFlags = []
+        if (c.fraud_analysis?.reasons && Array.isArray(c.fraud_analysis.reasons)) {
+            c.fraud_analysis.reasons.forEach(r => {
+                aiFlags.push({ icon: 'warning', color: 'text-primary', title: 'AI Flag', critical: true, desc: r })
+            })
+        }
+        if (c.extraction_warnings && Array.isArray(c.extraction_warnings)) {
+            c.extraction_warnings.forEach(w => {
+                aiFlags.push({ icon: 'data_object', color: 'text-amber-400', title: 'Data Warning', critical: false, desc: w })
+            })
+        }
+
+        return {
+            ...c,
+            id: c.id,
+            claim_number: c.claim_number,
+            holder_name: c.claimant_name || 'Unspecified',
+            type: c.incident_type || 'Unknown',
+            amount: c.claimed_amount ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(c.claimed_amount) : '$0.00',
+            risk_score: c.fraud_score != null ? c.fraud_score : 0,
+            status: c.status,
+            final_decision: c.final_decision,
+            date: c.created_at ? new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(new Date(c.created_at)) : '—',
+            policy_number: c.policies?.policy_number || '—',
+            member_since: c.policies?.policy_start_date ? new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }).format(new Date(c.policies.policy_start_date)) : '—',
+            previous_claims: '0',
+            assigned_to: c.users?.full_name || null,
+            flags: aiFlags
+        }
+    })
+
     // Use fallback data when backend is unreachable and we have no live data
     const isFallback = !!error && liveClaims.length === 0
     const claims = isFallback ? FALLBACK_CLAIMS : liveClaims

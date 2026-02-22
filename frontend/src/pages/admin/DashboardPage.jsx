@@ -207,7 +207,7 @@ export default function DashboardPage() {
                         </div>
 
                         {/* Live Signals */}
-                        <div className="rounded-xl border border-border-dark bg-surface-dark flex flex-col overflow-hidden">
+                        <div className="rounded-xl border border-border-dark bg-surface-dark flex flex-col overflow-hidden max-h-[450px]">
                             <div className="p-5 border-b border-white/5 flex items-center justify-between">
                                 <h3 className="text-base font-semibold text-white flex items-center gap-2">
                                     <span className="relative flex h-3 w-3">
@@ -231,15 +231,17 @@ export default function DashboardPage() {
                                         : signals.map((s, i) => {
                                             const style = ALERT_BADGEs[s.level] || ALERT_BADGEs['System']
                                             return (
-                                                <div key={s.id || i} className={`p-4 hover:bg-white/5 transition-colors cursor-pointer border-l-4 ${style.borderClass}`}>
+                                                <div key={s.id || i} className={`p-3 hover:bg-white/5 transition-colors cursor-pointer border-l-4 ${style.borderClass}`}>
                                                     <div className="flex items-start justify-between mb-1">
-                                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${style.badgeClass}`}>
+                                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${style.badgeClass}`}>
                                                             {s.level}
                                                         </span>
-                                                        <span className="text-[10px] text-slate-400 font-mono">{s.detected}</span>
+                                                        <span className="text-[9px] text-slate-400 font-mono">{s.detected}</span>
                                                     </div>
-                                                    <p className="text-sm font-medium text-slate-200 mb-1">{s.title}</p>
-                                                    <p className="text-xs text-slate-500 truncate">{s.description}</p>
+                                                    <p className="text-xs font-medium text-slate-200 mb-1.5">{s.title}</p>
+                                                    <div className="text-[10px] text-slate-400 font-mono bg-black/20 p-2 rounded border border-white/5 whitespace-pre-wrap break-words leading-relaxed shadow-inner">
+                                                        {s.description}
+                                                    </div>
                                                 </div>
                                             )
                                         })
@@ -261,6 +263,7 @@ export default function DashboardPage() {
                                         <th className="px-6 py-3 text-left">Claim ID</th>
                                         <th className="px-6 py-3 text-left">Holder</th>
                                         <th className="px-6 py-3 text-left">Amount</th>
+                                        <th className="px-6 py-3 text-left">Reason</th>
                                         <th className="px-6 py-3 text-left">Risk Score</th>
                                         <th className="px-6 py-3 text-left">Status</th>
                                     </tr>
@@ -289,6 +292,11 @@ export default function DashboardPage() {
                                                     <td className="px-6 py-4 font-mono text-slate-300">{r.id}</td>
                                                     <td className="px-6 py-4 text-white">{r.holder}</td>
                                                     <td className="px-6 py-4 text-slate-300">{r.amount}</td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/20 text-primary border border-primary/20">
+                                                            {r.reason}
+                                                        </span>
+                                                    </td>
                                                     <td className="px-6 py-4">
                                                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${riskColor(r.risk_score)}`}>
                                                             {r.risk_score}
