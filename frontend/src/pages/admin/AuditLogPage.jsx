@@ -91,8 +91,76 @@ function eventToLayer(event) {
     return { ...meta, ms: durationStr, status: statusLabel, statusColor, halted: failed, content: null }
 }
 
+/* ─── Payload UI Renderers ───────────────────────────────────────── */
+function renderPayload(payload) {
+    if (!payload) return null;
+
+    if (payload.fraud_score !== undefined) {
+        // Fraud Engine output formatting
+        return (
+            <div className="grid grid-cols-2 gap-4 mt-2">
+                <div className="bg-[#1f1618] border border-white/5 rounded p-3">
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Risk Score</div>
+                    <div className="text-xl font-mono text-primary font-bold">{(payload.fraud_score * 100).toFixed(1)}%</div>
+                </div>
+                <div className="bg-[#1f1618] border border-white/5 rounded p-3">
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Risk Band</div>
+                    <div className="text-lg font-mono text-white capitalize">{payload.risk_band || '—'}</div>
+                </div>
+                {payload.recommended_action && (
+                    <div className="bg-[#1f1618] border border-white/5 rounded p-3 col-span-2">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Recommended Action</div>
+                        <div className="text-sm font-bold text-amber-400 capitalize bg-amber-500/10 inline-block px-2.5 py-1 rounded border border-amber-500/20 shadow-inner">
+                            {payload.recommended_action.replace(/_/g, ' ')}
+                        </div>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    if (payload.ruleset_id) {
+        // Policy Engine output formatting
+        const isApprove = payload.status === 'APPROVE'
+        return (
+            <div className="flex flex-col gap-3 mt-2">
+                <div className="flex items-center gap-3">
+                    <div className="bg-[#1f1618] border border-white/5 rounded p-3 flex-1">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Status</div>
+                        <div className={`text-sm font-bold ${isApprove ? 'text-emerald-400' : 'text-primary'}`}>{payload.status}</div>
+                    </div>
+                    {payload.recommended_amount !== undefined && (
+                        <div className="bg-[#1f1618] border border-white/5 rounded p-3 flex-1">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Approved Amount</div>
+                            <div className="text-sm font-mono text-white">
+                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(payload.recommended_amount)}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                {(payload.rules_failed?.length > 0 || payload.rules_flagged?.length > 0) && (
+                    <div className="bg-[#1f1618] border border-white/5 rounded p-3">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Flags</div>
+                        <ul className="text-xs list-disc list-inside space-y-1 ml-1">
+                            {payload.rules_failed?.map((r, i) => <li key={`f-${i}`} className="text-primary">{r}</li>)}
+                            {payload.rules_flagged?.map((r, i) => <li key={`w-${i}`} className="text-amber-400">{r}</li>)}
+                        </ul>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    // Default JSON view for anything else, styling raw json text
+    return (
+        <pre className="text-[11px] text-slate-400 font-mono bg-[#1f1618] p-3 rounded border border-white/5 overflow-x-auto mt-2 whitespace-pre-wrap leading-relaxed">
+            {JSON.stringify(payload, null, 2)}
+        </pre>
+    )
+}
+
 /* ─── Accordion layer component ──────────────────────────────────── */
-function AccordionLayer({ layer, content }) {
+function AccordionLayer({ layer, content, parsedPayload }) {
     // For demo purposes, we automatically open the first item that has content (warned status usually)
     const [open, setOpen] = useState(layer.statusColor === 'warn')
     const isHalted = layer.halted
@@ -133,12 +201,16 @@ function AccordionLayer({ layer, content }) {
                             </div>
                             <div>
                                 <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">ANALYSIS_OUTPUT</div>
-                                <p className="text-sm text-white font-medium leading-relaxed drop-shadow-md">
-                                    {content}
-                                </p>
+                                {parsedPayload ? (
+                                    renderPayload(parsedPayload)
+                                ) : (
+                                    <p className="text-sm text-white font-medium leading-relaxed drop-shadow-md whitespace-pre-wrap">
+                                        {content}
+                                    </p>
+                                )}
                                 <div className="flex gap-2 mt-3">
                                     <span className="px-2 py-1 rounded text-[10px] font-mono border border-white/10 text-slate-400 bg-black/20">Model: v4.0.1</span>
-                                    <span className="px-2 py-1 rounded text-[10px] font-mono border border-white/10 text-slate-400 bg-black/20">Tokens: 482</span>
+                                    <span className="px-2 py-1 rounded text-[10px] font-mono border border-white/10 text-slate-400 bg-black/20">Tokens: {parsedPayload ? JSON.stringify(parsedPayload).length : 482}</span>
                                 </div>
                             </div>
                         </div>
@@ -159,16 +231,46 @@ export default function AuditLogPage() {
 
     // Fetch recent claims to populate the left table
     const { data: claimsData, loading, error, refetch } = useFetch('/api/claims?page_size=50', 20_000)
-    const liveClaims = claimsData?.items || []
+
+    // Transform backend data to match UI shape
+    const liveClaims = (claimsData?.items || []).map(c => ({
+        ...c,
+        id: c.id,
+        claim_number: c.claim_number,
+        holder_name: c.claimant_name || 'Unspecified',
+        date: c.created_at ? new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(new Date(c.created_at)) : '—',
+        risk_score: c.fraud_score != null ? c.fraud_score : 0,
+        status: c.status,
+        final_decision: c.final_decision
+    }))
+
     // Use fallback when backend is unreachable and no live data
     const isFallback = !!error && liveClaims.length === 0
     const claims = isFallback ? FALLBACK_AUDIT : liveClaims
 
     // Fetch events for the selected claim
-    const { data: eventsData, loading: eventsLoading } = useFetch(
-        selected ? `/api/claims/${selected.id}/events` : null
+    const { data: rawEventsData, loading: eventsLoading } = useFetch(
+        selected ? `/api/claims/${selected.id}/audit` : null
     )
-    const events = eventsData || []
+
+    // Parse audit_trail events payload json
+    const events = (rawEventsData?.audit_trail || []).map(e => {
+        let content = null;
+        let parsedPayload = null;
+        try {
+            const parsed = typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload;
+            if (parsed && Object.keys(parsed).length > 0) {
+                parsedPayload = parsed;
+                // Formatting payload objects into readable info
+                content = JSON.stringify(parsed, null, 2);
+            }
+        } catch (err) { }
+        return {
+            ...e,
+            content,
+            parsedPayload
+        }
+    })
 
     const filtered = claims.filter(c =>
         (c.claim_number || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -367,7 +469,7 @@ export default function AuditLogPage() {
                                         { id: '4', stage: 'decision', event_type: 'failed', duration_ms: 5 },
                                         { id: '5', stage: 'audit', event_type: 'logged', duration_ms: 10 }
                                     ] : events).map((event, i) => (
-                                        <AccordionLayer key={event.id || i} layer={eventToLayer(event)} content={event.content || null} />
+                                        <AccordionLayer key={event.id || i} layer={eventToLayer(event)} content={event.content || null} parsedPayload={event.parsedPayload} />
                                     ))
                                 }
                             </div>
