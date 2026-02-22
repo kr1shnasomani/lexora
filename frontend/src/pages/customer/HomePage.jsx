@@ -5,6 +5,7 @@ import { useFetch } from '../../hooks/useFetch'
 import { SkeletonPolicyCard, Skeleton } from '../../components/shared/Skeleton'
 import ErrorToast from '../../components/shared/ErrorToast'
 import { useState } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
 
 const policyIcon = (type) => {
     const map = { health: 'cardiology', auto: 'directions_car', travel: 'flight', pet: 'pets', life: 'favorite' }
@@ -18,15 +19,16 @@ const policyAccent = (type) => {
 
 export default function HomePage() {
     const navigate = useNavigate()
+    const { user } = useAuth()
     const [toastError, setToastError] = useState(null)
 
-    const { data: profile, loading: profileLoading, error: profileError } = useFetch('/api/user/profile')
-    const { data: policiesData, loading: policiesLoading, error: policiesError } = useFetch('/api/policies?status=active&page_size=2')
+    // The backend uses ?email= for customer lookups natively
+    const policiesUrl = user?.email ? `/api/customer/policies?email=${encodeURIComponent(user.email)}&status=active` : null
+    const { data: policiesData, loading: policiesLoading, error: policiesError } = useFetch(policiesUrl)
 
-    if (profileError && !toastError) setToastError(profileError)
     if (policiesError && !toastError) setToastError(policiesError)
 
-    const policies = policiesData?.items || []
+    const policies = policiesData?.policies || []
 
     const greeting = () => {
         const h = new Date().getHours()
@@ -43,10 +45,10 @@ export default function HomePage() {
                 {/* Welcome */}
                 <section className="mb-10">
                     <div className="flex flex-col gap-2">
-                        {profileLoading
+                        {!user
                             ? <><Skeleton className="h-10 w-80" /><Skeleton className="h-5 w-64 mt-2" /></>
                             : <>
-                                <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight">{greeting()}, {profile?.name?.split(' ')[0] || 'there'}</h2>
+                                <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight">{greeting()}, {user?.name?.split(' ')[0] || 'there'}</h2>
                                 <p className="text-slate-400 text-lg">Intelligence Core active. Your coverage is optimized.</p>
                             </>
                         }
@@ -90,7 +92,9 @@ export default function HomePage() {
                                             <div className="grid grid-cols-2 gap-4 mb-8">
                                                 {p.coverage_amount && <div><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Coverage</p><p className="text-white font-medium">{p.coverage_amount}</p></div>}
                                                 {p.renewal_date && <div><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Renewal</p><p className="text-white font-medium">{p.renewal_date}</p></div>}
-                                                {p.extra_stats?.vehicle && <div><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Vehicle</p><p className="text-white font-medium">{p.extra_stats.vehicle}</p></div>}
+                                                {p.extra_stats && Object.entries(p.extra_stats).map(([k, v]) => (
+                                                    <div key={k}><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">{k}</p><p className="text-white font-medium">{v}</p></div>
+                                                ))}
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <button onClick={() => navigate('/customer/file-claim')} className="flex-1 bg-primary hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
