@@ -11,6 +11,7 @@ from config import get_settings
 from routes.claims import router as claims_router
 from routes.webhooks import router as webhooks_router
 from routes.customer import router as customer_router
+from routes.dashboard import router as dashboard_router
 
 settings = get_settings()
 
@@ -34,6 +35,7 @@ app.add_middleware(
 app.include_router(claims_router, prefix="/api")
 app.include_router(webhooks_router, prefix="/api")
 app.include_router(customer_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")
 
 @app.get("/")
 async def root():

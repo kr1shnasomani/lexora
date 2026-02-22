@@ -94,13 +94,13 @@ async def list_claims(
     offset: int = Query(0, ge=0),
 ):
     db = get_supabase()
-    query = db.table("claims").select("*").order("created_at", desc=True).limit(limit).offset(offset)
+    query = db.table("claims").select("*, policies(policy_number, policy_start_date), users(full_name)").order("created_at", desc=True).limit(limit).offset(offset)
 
     if status:
         query = query.eq("status", status)
 
     result = query.execute()
-    return {"claims": result.data or [], "count": len(result.data or [])}
+    return {"items": result.data or [], "count": len(result.data or [])}
 
 
 # ─────────────────────────────────────────────────────────────
