@@ -1,31 +1,54 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLACEHOLDER — Auth Context
-// Currently returns a passthrough (always "authenticated").
-// Replace the TODO sections with real Supabase calls when ready.
+// Auth Context — Demo mode
+// signIn() accepts { email, role, name } set by LoginPage after OTP verification.
+// Replace with real Supabase calls when ready.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const AuthContext = createContext(null)
 
-export const AuthProvider = ({ children }) => {
-    // TODO: Replace with supabase.auth.getUser() on mount
-    const [user, setUser] = useState(null)
-    // 'admin' | 'customer' | null — set from Supabase user metadata/role
-    const [role, setRole] = useState(null)
-    const [loading, setLoading] = useState(false)
+const SESSION_KEY = 'lexora_demo_session'
 
-    // TODO: Replace with supabase.auth.signInWithPassword(...)
-    const signIn = async ({ email, password }) => {
-        console.log('[Auth] signIn placeholder — wire Supabase here')
-        // On success: setUser(data.user), setRole(data.user.user_metadata.role)
+export const AuthProvider = ({ children }) => {
+    const [user, setUser] = useState(null)
+    const [role, setRole] = useState(null)
+    const [loading, setLoading] = useState(true)
+
+    // Rehydrate session from sessionStorage on page refresh
+    useEffect(() => {
+        try {
+            const stored = sessionStorage.getItem(SESSION_KEY)
+            if (stored) {
+                const { user: u, role: r } = JSON.parse(stored)
+                setUser(u)
+                setRole(r)
+            }
+        } catch (_) { }
+        setLoading(false)
+    }, [])
+
+    /**
+     * Demo signIn — called by LoginPage after OTP is accepted.
+     * @param {{ email: string, role: 'customer'|'admin', name: string }} creds
+     * Replace body with: supabase.auth.verifyOtp(...)
+     */
+    const signIn = async ({ email, role: r, name }) => {
+        const u = { id: 'demo-user-001', email, name }
+        setUser(u)
+        setRole(r)
+        // Persist across page refreshes (not across browser close — sessionStorage)
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify({ user: u, role: r }))
     }
 
-    // TODO: Replace with supabase.auth.signOut()
+    /**
+     * Sign out — clears state and session.
+     * Replace with: supabase.auth.signOut()
+     */
     const signOut = async () => {
-        console.log('[Auth] signOut placeholder — wire Supabase here')
         setUser(null)
         setRole(null)
+        sessionStorage.removeItem(SESSION_KEY)
     }
 
     return (

@@ -17,7 +17,7 @@ const ModeSelectionPage = () => (
         <main className="grid w-full max-w-5xl grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8 z-10">
             {/* Customer Portal */}
             <Link
-                to="/customer"
+                to="/login?role=customer"
                 className="group card-hover relative flex flex-col gap-6 rounded-2xl border border-border-dark bg-surface-dark p-8 transition-all duration-300 ease-out hover:-translate-y-1"
             >
                 <div className="flex items-start justify-between">
@@ -39,7 +39,7 @@ const ModeSelectionPage = () => (
 
             {/* Admin / Agent Portal */}
             <Link
-                to="/admin/dashboard"
+                to="/login?role=admin"
                 className="group card-hover relative flex flex-col gap-6 rounded-2xl border border-border-dark bg-surface-dark p-8 transition-all duration-300 ease-out hover:-translate-y-1"
             >
                 <div className="flex items-start justify-between">
