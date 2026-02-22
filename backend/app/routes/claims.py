@@ -28,8 +28,23 @@ async def get_claims(
 ):
     claims, total = list_claims(page, page_size, status, risk_band)
     
+    from datetime import datetime, timezone
     items = []
     for c in claims:
+        # Parse submitted_at / created_at into a readable date string
+        raw_date = c.get("submitted_at") or c.get("created_at")
+        if raw_date:
+            try:
+                if isinstance(raw_date, str):
+                    dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                else:
+                    dt = raw_date
+                date_str = dt.strftime("%b %d, %Y")
+            except Exception:
+                date_str = "—"
+        else:
+            date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
+
         # Mini assembly for list items
         items.append(ClaimListItem(
             id=c["id"],
@@ -40,7 +55,7 @@ async def get_claims(
             risk_score=c.get("fraud_score", 0.1) * 100,
             status=c["status"],
             final_decision=c.get("final_decision"),
-            date="Oct 12, 2023", # mock date
+            date=date_str,
             flags=[]
         ))
         
