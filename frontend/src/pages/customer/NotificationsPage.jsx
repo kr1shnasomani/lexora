@@ -6,20 +6,24 @@ import { Skeleton } from '../../components/shared/Skeleton'
 import ErrorToast from '../../components/shared/ErrorToast'
 import { useState } from 'react'
 import { api } from '../../lib/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function NotificationsPage() {
     const [toastError, setToastError] = useState(null)
+    const { user } = useAuth()
 
-    const { data: notifications, loading: loadingNotifs, error: notifsError } = useFetch('/api/notifications', 60_000)
-    const { data: prefs, loading: loadingPrefs, error: prefsError, refetch } = useFetch('/api/notifications/prefs')
+    const emailParam = user?.email ? `?email=${encodeURIComponent(user.email)}` : ''
+
+    const { data: notifications, loading: loadingNotifs, error: notifsError } = useFetch(user?.email ? `/api/notifications${emailParam}` : null, 60_000)
+    const { data: prefs, loading: loadingPrefs, error: prefsError, refetch } = useFetch(user?.email ? `/api/notifications/prefs${emailParam}` : null)
 
     if (notifsError && !toastError) setToastError(notifsError)
     if (prefsError && !toastError) setToastError(prefsError)
 
     const toggle = async (key, currentState) => {
         try {
-            await api.put('/api/notifications/prefs', { key, enabled: !currentState })
-            refetch()
+            await api.put(`/api/notifications/prefs${emailParam}`, { key, enabled: !currentState })
+            // To provide a smooth visual, we skip refetch() since the mock backend is static
         } catch (err) {
             setToastError(err.message || 'Failed to update preference')
         }
