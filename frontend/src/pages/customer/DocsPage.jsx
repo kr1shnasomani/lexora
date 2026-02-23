@@ -4,13 +4,9 @@ import BottomNav from '../../components/customer/BottomNav'
 import { useFetch } from '../../hooks/useFetch'
 import { Skeleton } from '../../components/shared/Skeleton'
 import ErrorToast from '../../components/shared/ErrorToast'
+import { useAuth } from '../../contexts/AuthContext'
 
-const recentActivity = [
-    { label: "Downloaded 'Health_Policy.pdf'", time: 'Yesterday, 4:15 PM', active: false },
-    { label: "Shared 'Invoice_Jan24.pdf'", time: 'Jan 12, 09:30 AM', active: false },
-]
-
-function DocRow({ name, size, type, date, iconBg, icon }) {
+function DocRow({ name, size, type, date, iconBg, icon, onDownload, downloading }) {
     return (
         <div className="grid grid-cols-12 gap-4 px-6 py-4 items-center border-b border-surface-border last:border-0 hover:bg-white/5 transition-colors group">
             <div className="col-span-6 flex items-center gap-3">
@@ -24,8 +20,13 @@ function DocRow({ name, size, type, date, iconBg, icon }) {
             </div>
             <div className="col-span-3 text-slate-400 text-sm">{date}</div>
             <div className="col-span-3 flex justify-end">
-                <button className="p-2 text-slate-400 hover:text-white hover:bg-surface-border rounded-full transition-colors">
-                    <span className="material-symbols-outlined">download</span>
+                <button
+                    onClick={onDownload}
+                    disabled={downloading}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-surface-border rounded-full transition-colors disabled:opacity-50">
+                    <span className={`material-symbols-outlined ${downloading ? 'animate-pulse text-primary' : ''}`}>
+                        {downloading ? 'cloud_download' : 'download'}
+                    </span>
                 </button>
             </div>
         </div>
@@ -55,39 +56,105 @@ function DocTable({ rows, loading }) {
 }
 
 export default function DocsPage() {
+    const { user } = useAuth()
     const [search, setSearch] = useState('')
     const [toastError, setToastError] = useState(null)
-    const { data, loading, error } = useFetch('/api/policies')
+    const [downloadingDocs, setDownloadingDocs] = useState({})
+
+    const policiesUrl = user?.email ? `/api/customer/policies?email=${encodeURIComponent(user.email)}` : null
+    const claimsUrl = user?.email ? `/api/customer/claims?email=${encodeURIComponent(user.email)}` : null
+
+    const { data: policiesData, loading: loadingPolicies, error: errorPolicies } = useFetch(policiesUrl)
+    const { data: claimsData, loading: loadingClaims, error: errorClaims } = useFetch(claimsUrl)
+
+    const error = errorPolicies || errorClaims
     if (error && !toastError) setToastError(error)
 
-    const policies = data?.items || []
+    const loading = loadingPolicies || loadingClaims
+    const policies = policiesData?.policies || []
+    const claims = claimsData?.claims || []
 
     // Derive policy documents from live policy data
     const policyDocs = policies.map(p => ({
-        name: `${p.name.replace(/ /g, '_')}_Certificate.pdf`,
+        id: `policy-${p.id}`,
+        name: `${(p.name || 'Insurance').replace(/ /g, '_')}_Certificate.pdf`,
         size: '2.1 MB',
         type: 'PDF',
         date: p.renewal_date || '—',
         iconBg: 'bg-blue-500/10 text-blue-400',
         icon: 'picture_as_pdf',
+        onDownload: () => setToastError('Policy Certificates are generated dynamically by your agent.')
     }))
 
-    const claimDocs = [
-        { name: 'Accident_Scene_Photo_01.jpg', size: '4.2 MB', type: 'JPG', date: 'Dec 12, 2024', iconBg: 'bg-amber-500/10 text-amber-400', icon: 'image' },
-        { name: 'Police_Report_#99283.docx', size: '145 KB', type: 'DOCX', date: 'Dec 14, 2024', iconBg: 'bg-blue-500/10 text-blue-400', icon: 'description' },
-    ]
+    const handleClaimDocDownload = async (claim) => {
+        if (!user?.email || !claim.id) return
+        setDownloadingDocs(prev => ({ ...prev, [claim.id]: true }))
+        try {
+            // First we need to find the document_id associated with this claim
+            const detailRes = await fetch(`/api/customer/policies/${claim.policy_id}?email=${encodeURIComponent(user.email)}`)
+            if (!detailRes.ok) throw new Error("Could not fetch policy structure")
+            const detailData = await detailRes.json()
+
+            // Find a document matching this claim
+            const doc = detailData.documents?.find(d => d.claim_number === claim.claim_number)
+            if (!doc) throw new Error("Could not verify document securely in Supabase Storage.")
+
+            const res = await fetch(`/api/customer/claims/download/${doc.id}?email=${encodeURIComponent(user.email)}`)
+            if (!res.ok) throw new Error("Failed to generate secure download link. Is your backend running?")
+            const data = await res.json()
+            if (data.url) window.open(data.url, '_blank')
+        } catch (e) {
+            setToastError(e.message)
+        } finally {
+            setDownloadingDocs(prev => ({ ...prev, [claim.id]: false }))
+        }
+    }
+
+    // Derive claim documents from live claim data
+    const claimDocs = claims.map(c => ({
+        id: c.id,
+        name: `Claim_Evidence_${c.claim_number}.pdf`,
+        size: '4.2 MB',
+        type: 'PDF',
+        date: c.date || c.created_at?.split('T')[0] || '—',
+        iconBg: 'bg-amber-500/10 text-amber-400',
+        icon: 'description',
+        downloading: downloadingDocs[c.id],
+        onDownload: () => handleClaimDocDownload(c)
+    }))
 
     const invoiceDocs = policies.map(p => ({
+        id: `invoice-${p.id}`,
         name: `Premium_Invoice_${p.policy_number}.pdf`,
         size: '560 KB',
         type: 'PDF',
         date: p.renewal_date || '—',
         iconBg: 'bg-emerald-500/10 text-emerald-400',
         icon: 'receipt',
+        onDownload: () => setToastError('Invoices are synchronized through your payment processor.')
     }))
 
     const filterDocs = (docs) =>
         search ? docs.filter(d => d.name.toLowerCase().includes(search.toLowerCase())) : docs
+
+    const allActivities = [
+        ...policies.map(p => ({
+            label: `Generated '${(p.name || 'Insurance').replace(/ /g, '_')}_Certificate.pdf'`,
+            time: p.since || p.renewal_date || 'Recent',
+            timestamp: new Date(p.since || p.renewal_date || 0).getTime(),
+            active: false
+        })),
+        ...claims.map(c => ({
+            label: `Uploaded documents for claim ${c.claim_number}`,
+            time: c.date || c.created_at?.split('T')[0] || 'Recent',
+            timestamp: new Date(c.created_at || 0).getTime(),
+            active: true
+        }))
+    ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 4)
+
+    const recentActivity = allActivities.length > 0 ? allActivities : [
+        { label: "Vault initialized", time: "Setup Complete", active: true }
+    ]
 
     return (
         <div className="min-h-screen bg-background-dark text-slate-100 flex flex-col font-display antialiased overflow-x-hidden selection:bg-primary selection:text-white pb-32">
@@ -121,7 +188,7 @@ export default function DocsPage() {
                             <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                                 <span className="material-symbols-outlined text-[18px]">folder_shared</span>Claim Documents
                             </h3>
-                            <DocTable rows={filterDocs(claimDocs)} loading={false} />
+                            <DocTable rows={filterDocs(claimDocs)} loading={loading} />
                         </div>
                         <div>
                             <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">

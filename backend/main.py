@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import get_settings
 from routes.claims import router as claims_router
 from routes.webhooks import router as webhooks_router
-from routes.customer import router as customer_router
+from routes.customer import router as customer_router, user_router, notifications_router
 from routes.dashboard import router as dashboard_router
 from routes.auth import router as auth_router
 
@@ -36,6 +36,8 @@ app.add_middleware(
 app.include_router(claims_router, prefix="/api")
 app.include_router(webhooks_router, prefix="/api")
 app.include_router(customer_router, prefix="/api")
+app.include_router(user_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 
