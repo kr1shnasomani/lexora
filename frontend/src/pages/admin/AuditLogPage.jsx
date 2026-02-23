@@ -70,25 +70,66 @@ const FALLBACK_AUDIT = [
 ]
 
 /* ─── Map backend audit_events → layer accordion items ───────────── */
-const STAGE_META = {
-    layer1: { key: 'perception', icon: 'visibility', title: 'Perception Engine', sub: 'GPT-4o Vision' },
-    policy_engine: { key: 'policy', icon: 'gavel', title: 'Policy Governance', sub: 'Rule Engine v2.1' },
-    tier1: { key: 'fraud', icon: 'security', title: 'Fraud Intel', sub: 'Graph Neural Net' },
-    tier2: { key: 'fraud', icon: 'security', title: 'Fraud Intel', sub: 'Graph Neural Net' },
-    tier3: { key: 'fraud', icon: 'security', title: 'Fraud Intel', sub: 'Graph Neural Net' },
-    decision: { key: 'decision', icon: 'psychology', title: 'Decision Engine', sub: 'Economic Opt.' },
-    audit: { key: 'audit', icon: 'history_edu', title: 'Audit & Learning', sub: 'Immutable Log' },
-}
-
 function eventToLayer(event) {
-    const meta = STAGE_META[event.stage] || { key: event.stage, icon: 'circle', title: event.stage, sub: event.event_type }
+    const meta = event._meta || { key: event.stage, icon: 'circle', title: event.stage, sub: event.event_type }
+    const isPending = event.event_type === 'pending'
+
     const durationStr = event.duration_ms ? `${event.duration_ms}ms` : '—'
     const failed = event.event_type === 'failed'
     const warned = event.event_type === 'warned'
     const logged = event.stage === 'audit'
-    let statusColor = failed ? 'primary' : warned ? 'warn' : logged ? 'blue' : 'success'
-    let statusLabel = failed ? 'FAIL' : warned ? 'WARN' : logged ? 'LOGGED' : 'PASS'
-    return { ...meta, ms: durationStr, status: statusLabel, statusColor, halted: failed, content: null }
+
+    let statusColor = isPending ? 'muted' : failed ? 'primary' : warned ? 'warn' : logged ? 'blue' : 'success'
+    let statusLabel = isPending ? 'PENDING' : failed ? 'FAIL' : warned ? 'WARN' : logged ? 'LOGGED' : 'PASS'
+
+    return { ...meta, ms: durationStr, status: statusLabel, statusColor, halted: false, content: null }
+}
+
+/* ─── Expandable Raw Fields Component ────────────────────────────── */
+function RawExtractionView({ extraction_raw, confidence }) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const keys = Object.keys(extraction_raw || {});
+    if (keys.length === 0) return null;
+
+    return (
+        <div className="bg-[#1f1618] border border-white/5 rounded p-3 mt-2">
+            <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="w-full flex items-center justify-between text-left group"
+                aria-expanded={isExpanded}
+            >
+                <div>
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 group-hover:text-slate-400 transition-colors">Raw Extracted Fields</div>
+                    {!isExpanded && (
+                        <div className="text-xs text-slate-400 font-medium">View {keys.length} extracted fields...</div>
+                    )}
+                </div>
+                <span className="material-symbols-outlined text-slate-500 group-hover:text-white transition-colors">
+                    {isExpanded ? 'expand_less' : 'expand_more'}
+                </span>
+            </button>
+
+            {isExpanded && (
+                <div className="mt-3 pt-3 border-t border-white/5">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                        {Object.entries(extraction_raw).map(([key, value]) => (
+                            <div key={key} className="flex flex-col">
+                                <span className="text-[10px] text-slate-400 font-mono capitalize">{key.replace(/_/g, ' ')}</span>
+                                <span className="text-xs text-white font-medium truncate" title={String(value)}>{value ? String(value) : '—'}</span>
+                            </div>
+                        ))}
+                    </div>
+                    {confidence !== undefined && (
+                        <div className="mt-4 pt-3 border-t border-white/5 flex justify-end">
+                            <span className="text-[10px] font-mono text-slate-500 tracking-wider">
+                                OVERALL CONFIDENCE: <strong className={confidence > 0.85 ? 'text-emerald-400' : 'text-amber-400'}>{(confidence * 100).toFixed(1)}%</strong>
+                            </span>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
 }
 
 /* ─── Payload UI Renderers ───────────────────────────────────────── */
@@ -151,10 +192,92 @@ function renderPayload(payload) {
         )
     }
 
+    // Perception Engine (layer1 / submission) output formatting
+    if (payload.fields_extracted !== undefined || payload.claim_number !== undefined) {
+        return (
+            <div className="flex flex-col gap-3 mt-2">
+                <div className="flex items-center gap-3">
+                    {payload.fields_extracted !== undefined && (
+                        <div className="bg-[#1f1618] border border-white/5 rounded p-3 flex-1">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Fields Extracted</div>
+                            <div className="text-xl font-mono text-white font-bold">{payload.fields_extracted}</div>
+                        </div>
+                    )}
+                    {payload.confidence !== undefined && (
+                        <div className="bg-[#1f1618] border border-white/5 rounded p-3 flex-1">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">OCR Confidence</div>
+                            <div className={`text-xl font-mono font-bold ${payload.confidence > 0.85 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                {(payload.confidence * 100).toFixed(1)}%
+                            </div>
+                        </div>
+                    )}
+                    {payload.claim_number !== undefined && !payload.fields_extracted && (
+                        <div className="bg-[#1f1618] border border-white/5 rounded p-3 flex-1">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Submission Extracted</div>
+                            <div className="text-sm font-mono text-white">{payload.claim_number}</div>
+                        </div>
+                    )}
+                </div>
+                {payload.extraction_raw && Object.keys(payload.extraction_raw).length > 0 && (
+                    <RawExtractionView
+                        extraction_raw={payload.extraction_raw}
+                        confidence={payload.confidence}
+                    />
+                )}
+                {payload.warnings?.length > 0 && (
+                    <div className="bg-[#1f1618] border border-white/5 rounded p-3">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Extraction Warnings</div>
+                        <ul className="text-xs list-disc list-inside space-y-1 ml-1 text-amber-400">
+                            {payload.warnings.map((w, i) => <li key={`w-${i}`}>{w}</li>)}
+                        </ul>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    // Decision Engine output formatting
+    if (payload.final_decision !== undefined) {
+        const routeColor = ['auto_approve'].includes(payload.final_decision) ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+            : ['fraud_investigation', 'auto_reject'].includes(payload.final_decision) ? 'text-primary bg-primary/10 border-primary/20'
+                : 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+
+        return (
+            <div className="flex flex-col gap-3 mt-2">
+                <div className="flex items-center gap-3">
+                    <div className="bg-[#1f1618] border border-white/5 rounded p-3 flex-1">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Final Routing</div>
+                        <div className={`text-sm font-bold uppercase inline-block px-2.5 py-1 rounded border shadow-inner ${routeColor}`}>
+                            {payload.final_decision.replace(/_/g, ' ')}
+                        </div>
+                    </div>
+                    {payload.approved_amount !== undefined && (
+                        <div className="bg-[#1f1618] border border-white/5 rounded p-3 flex-1">
+                            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Settlement Amount</div>
+                            <div className="text-xl font-mono text-white font-bold">
+                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(payload.approved_amount)}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                {payload.decision_rationale && (
+                    <div className="bg-[#1f1618] border border-white/5 rounded p-3">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Decision Rationale</div>
+                        <p className="text-xs text-white leading-relaxed">{payload.decision_rationale}</p>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     // Default JSON view for anything else, styling raw json text
+    const cleanPayload = { ...payload };
+    const noiseKeys = ['diagnostics', 'analytics_tags', 'raw_response', 'tiers_evaluated', 'layer'];
+    noiseKeys.forEach(k => delete cleanPayload[k]);
+
     return (
         <pre className="text-[11px] text-slate-400 font-mono bg-[#1f1618] p-3 rounded border border-white/5 overflow-x-auto mt-2 whitespace-pre-wrap leading-relaxed">
-            {JSON.stringify(payload, null, 2)}
+            {JSON.stringify(cleanPayload, null, 2)}
         </pre>
     )
 }
@@ -254,23 +377,86 @@ export default function AuditLogPage() {
     )
 
     // Parse audit_trail events payload json
-    const events = (rawEventsData?.audit_trail || []).map(e => {
+    let rawEvents = rawEventsData?.audit_trail || [];
+
+    if (isFallback) {
+        rawEvents = [
+            { id: '1', stage: 'layer1', event_type: 'warned', duration_ms: 450, content: 'Image quality degraded. OCR confidence fell below threshold (42%). Detected potential alteration in date field.' },
+            { id: '2', stage: 'policy_engine', event_type: 'passed', duration_ms: 12, payload: {} },
+            { id: '3', stage: 'fraud_engine', event_type: 'warned', duration_ms: 200, payload: { fraud_score: 0.85, risk_band: 'high' } },
+            { id: '4', stage: 'decision', event_type: 'failed', duration_ms: 5, payload: { final_decision: 'auto_reject' } },
+            { id: '5', stage: 'audit', event_type: 'logged', duration_ms: 10, payload: {} }
+        ];
+    }
+
+    const EXPECTED_STAGES = [
+        { key: 'layer1', icon: 'visibility', title: 'Perception Engine', sub: 'GPT-4o Vision' },
+        { key: 'policy_engine', icon: 'gavel', title: 'Policy Governance', sub: 'Rule Engine v2.1' },
+        { key: 'fraud_engine', icon: 'security', title: 'Fraud Intel', sub: 'Graph Neural Net' },
+        { key: 'decision', icon: 'psychology', title: 'Decision Engine', sub: 'Economic Opt.' },
+        { key: 'audit', icon: 'history_edu', title: 'Audit & Learning', sub: 'Immutable Log' }
+    ];
+
+    const events = EXPECTED_STAGES.map((expected, idx) => {
+        const stageEvents = rawEvents.filter(e => {
+            if (e.event_type === 'started') return false;
+            // Perception Engine can be logged as 'layer1' or 'submission'
+            if (expected.key === 'layer1' && (e.stage === 'layer1' || e.stage === 'submission')) return true;
+            return e.stage === expected.key;
+        });
+
+        let hasExtraction = false;
+        let rawjson = null;
+        if (expected.key === 'layer1' && selected && selected.extraction_raw) {
+            try {
+                rawjson = typeof selected.extraction_raw === 'string'
+                    ? JSON.parse(selected.extraction_raw)
+                    : selected.extraction_raw;
+                if (rawjson && Object.keys(rawjson).length > 0) hasExtraction = true;
+            } catch (e) { }
+        }
+
+        if (stageEvents.length === 0 && !hasExtraction) {
+            return {
+                id: `pending-${expected.key}-${idx}`,
+                stage: expected.key,
+                _meta: expected,
+                event_type: 'pending',
+                duration_ms: null,
+                content: "Awaiting execution. This analysis layer has not yet been processed for the current claim.",
+                parsedPayload: null
+            };
+        }
+
+        const latestEvent = stageEvents.length > 0
+            ? stageEvents[stageEvents.length - 1]
+            : { event_type: 'completed', duration_ms: 1250, payload: {} }; // Mock event if only extraction_raw
+
         let content = null;
         let parsedPayload = null;
         try {
-            const parsed = typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload;
-            if (parsed && Object.keys(parsed).length > 0) {
-                parsedPayload = parsed;
-                // Formatting payload objects into readable info
-                content = JSON.stringify(parsed, null, 2);
+            const parsed = typeof latestEvent.payload === 'string' ? JSON.parse(latestEvent.payload || '{}') : (latestEvent.payload || {});
+
+            if ((parsed && Object.keys(parsed).length > 0) || hasExtraction) {
+                parsedPayload = parsed || {};
+
+                // Splice extraction_raw directly into Perception payload
+                if (hasExtraction) {
+                    parsedPayload.extraction_raw = rawjson;
+                    if (parsedPayload.fields_extracted === undefined) {
+                        parsedPayload.fields_extracted = Object.keys(rawjson).length;
+                    }
+                }
+                content = JSON.stringify(parsedPayload, null, 2);
+            } else if (!parsed && latestEvent.content) {
+                content = latestEvent.content;
             }
-        } catch (err) { }
-        return {
-            ...e,
-            content,
-            parsedPayload
+        } catch (err) {
+            content = latestEvent.content || null;
         }
-    })
+
+        return { ...latestEvent, _meta: expected, content, parsedPayload };
+    });
 
     const filtered = claims.filter(c =>
         (c.claim_number || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -462,13 +648,7 @@ export default function AuditLogPage() {
                                     ? [0, 1, 2].map(i => (
                                         <div key={i} className="rounded-lg border border-border-dark bg-surface-dark p-4 animate-pulse h-16" />
                                     ))
-                                    : (events.length === 0 ? [
-                                        { id: '1', stage: 'layer1', event_type: 'warned', duration_ms: 450, content: 'Image quality degraded. OCR confidence fell below threshold (42%). Detected potential alteration in date field.' },
-                                        { id: '2', stage: 'policy_engine', event_type: 'passed', duration_ms: 12 },
-                                        { id: '3', stage: 'tier1', event_type: 'warned', duration_ms: 200 },
-                                        { id: '4', stage: 'decision', event_type: 'failed', duration_ms: 5 },
-                                        { id: '5', stage: 'audit', event_type: 'logged', duration_ms: 10 }
-                                    ] : events).map((event, i) => (
+                                    : events.map((event, i) => (
                                         <AccordionLayer key={event.id || i} layer={eventToLayer(event)} content={event.content || null} parsedPayload={event.parsedPayload} />
                                     ))
                                 }
