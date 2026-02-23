@@ -52,7 +52,6 @@ def run_decision(claim_id: str) -> dict:
             route = "manual_review"
             rationale = "Low extraction confidence. Requires manual verification of data quality."
             approved_amount = None
-
         # Flowchart Step 2: Policy Rules Result?
         elif policy_decision and not policy_decision.get("outcome", {}).get("eligible", True):
             route = "auto_reject"
@@ -61,8 +60,16 @@ def run_decision(claim_id: str) -> dict:
             approved_amount = 0
 
         else:
+            # Flowchart Step 2b: Layer 2 Review Override
+            if policy_decision and policy_decision.get("outcome", {}).get("status") == "REVIEW":
+                route = "manual_review"
+                review_reasons = [r.get("message") for r in policy_decision.get("reasons", [])]
+                reason_str = " | ".join(review_reasons)[:150]
+                rationale = f"Layer 2 flagged for review: {reason_str}. (Additional Layer 3 fraud signals acquired for training: Score {fraud_score:.2f})"
+                approved_amount = None
+
             # Flowchart Step 3: Fraud Score Branching
-            if fraud_score >= critical_fraud_threshold:
+            elif fraud_score >= critical_fraud_threshold:
                 # High Fraud -> SIU Investigation
                 route = "fraud_investigation"
                 rationale = f"High fraud probability detected (Score {fraud_score:.2f} >= {critical_fraud_threshold}). Assiging to SIU."
@@ -94,8 +101,6 @@ def run_decision(claim_id: str) -> dict:
                         route = "manual_review"
                         rationale = f"{rule_reason} However, extraction confidence is only moderate ({extraction_confidence:.2f} < {auto_approve_confidence}). Required manual review."
                         approved_amount = None
-
-
         decision_output = {
             "route": route,
             "metrics": {
