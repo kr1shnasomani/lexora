@@ -16,8 +16,8 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                480,
-                -184
+                688,
+                -192
             ],
             "id": "8f09c436-f79e-4af8-a694-eb407756b9f1",
             "name": "Download File"
@@ -48,7 +48,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                1152,
+                1360,
                 -96
             ],
             "id": "ef301d33-5b70-40e5-a1b1-488f26a481e7",
@@ -74,7 +74,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                1376,
+                1584,
                 -288
             ],
             "id": "cf8800a2-64df-4860-806d-a6f5acf8d992",
@@ -109,7 +109,7 @@
             "type": "n8n-nodes-base.set",
             "typeVersion": 3.4,
             "position": [
-                1600,
+                1808,
                 -288
             ],
             "id": "6e066730-6ff6-4fe1-b637-7fadeaaf38d2",
@@ -132,7 +132,7 @@
             "type": "n8n-nodes-base.set",
             "typeVersion": 3.4,
             "position": [
-                1600,
+                1808,
                 -96
             ],
             "id": "a4675ea6-9e4a-4aa1-a55a-2c9fb217859a",
@@ -155,7 +155,7 @@
             "type": "n8n-nodes-base.set",
             "typeVersion": 3.4,
             "position": [
-                1600,
+                1808,
                 96
             ],
             "id": "ff1eec0e-7e2f-417c-a27c-36161b4416a6",
@@ -178,7 +178,7 @@
             "type": "@n8n/n8n-nodes-langchain.googleGemini",
             "typeVersion": 1.1,
             "position": [
-                1376,
+                1584,
                 96
             ],
             "id": "2ff33002-c9f5-4f57-bb81-c4dca544ee09",
@@ -201,7 +201,7 @@
             "type": "n8n-nodes-base.extractFromFile",
             "typeVersion": 1.1,
             "position": [
-                1152,
+                1360,
                 288
             ],
             "id": "fcf2874e-f06e-471c-93c2-5ba6a95bcdf5",
@@ -224,7 +224,7 @@
             "type": "n8n-nodes-base.set",
             "typeVersion": 3.4,
             "position": [
-                1600,
+                1808,
                 288
             ],
             "id": "436afe81-dd5b-4695-b166-a08c23490f87",
@@ -244,7 +244,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                1376,
+                1584,
                 -96
             ],
             "id": "85bbf9e2-1ce1-4c3c-969b-2ae1beb148b7",
@@ -272,7 +272,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                1376,
+                1584,
                 288
             ],
             "id": "aa3a4e9e-e982-4f89-a949-d182c3f22af5",
@@ -370,7 +370,7 @@
             "type": "n8n-nodes-base.switch",
             "typeVersion": 3.4,
             "position": [
-                32,
+                240,
                 -128
             ],
             "id": "5052f108-f05d-4b84-97c5-7f40b3b78fa8",
@@ -383,7 +383,7 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                256,
+                464,
                 -256
             ],
             "id": "461662ce-8c57-46c7-b1b2-e38348b42bdf",
@@ -488,7 +488,7 @@
             "type": "n8n-nodes-base.switch",
             "typeVersion": 3.4,
             "position": [
-                928,
+                1136,
                 -32
             ],
             "id": "ed3eef19-b3dd-4374-9f32-96e9f8110eb5",
@@ -499,7 +499,7 @@
             "type": "n8n-nodes-base.merge",
             "typeVersion": 3.2,
             "position": [
-                704,
+                912,
                 -112
             ],
             "id": "bb7cb6b7-0e64-4673-b3da-eaaa1584da7a",
@@ -512,7 +512,7 @@
             "type": "n8n-nodes-base.merge",
             "typeVersion": 3.2,
             "position": [
-                1824,
+                2032,
                 64
             ],
             "id": "b1e973f0-4819-4a82-832e-f22ff25782ae",
@@ -525,7 +525,7 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                -192,
+                16,
                 -112
             ],
             "id": "c2098de4-7871-43ff-8af5-5a0188787bee",
@@ -538,37 +538,11 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1152,
+                1360,
                 -288
             ],
             "id": "6a69e776-e656-44bd-be2d-b2a053f931ba",
             "name": "Code in JavaScript1"
-        },
-        {
-            "parameters": {
-                "formTitle": "Medical Upload",
-                "formFields": {
-                    "values": [
-                        {
-                            "fieldLabel": "url"
-                        },
-                        {
-                            "fieldLabel": "file",
-                            "fieldType": "file"
-                        }
-                    ]
-                },
-                "options": {}
-            },
-            "type": "n8n-nodes-base.formTrigger",
-            "typeVersion": 2.5,
-            "position": [
-                -416,
-                -112
-            ],
-            "id": "3c5361ed-9513-4fa0-ac6d-95ad2b6a4c3b",
-            "name": "File Upload",
-            "webhookId": "5a5ef743-079d-4baf-94f7-a8f1596db000"
         },
         {
             "parameters": {
@@ -595,11 +569,29 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                928,
+                1136,
                 -224
             ],
             "id": "a6b3bf83-2aab-4201-a8dc-c14e3053d5b8",
             "name": "Supabase Storage S3"
+        },
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "/claim-upload",
+                "responseMode": "lastNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2.1,
+            "position": [
+                -208,
+                -112
+            ],
+            "id": "bfd8b1bb-b821-40b5-9df1-2fac400dda64",
+            "name": "Webhook",
+            "webhookId": "91f54ee7-85ce-4d26-a995-c07b50a8f907",
+            "notesInFlow": false
         },
         {
             "parameters": {
@@ -620,7 +612,7 @@
                         },
                         {
                             "fieldId": "policy_id",
-                            "fieldValue": "807d584e-d36e-49d0-92a6-b775986f2dc9"
+                            "fieldValue": "={{ $json.real_policy_uuid }}"
                         },
                         {
                             "fieldId": "claimant_name",
@@ -676,10 +668,10 @@
             "type": "n8n-nodes-base.supabase",
             "typeVersion": 1,
             "position": [
-                2496,
+                3440,
                 96
             ],
-            "id": "b13ba917-8d91-4810-82f5-414e5ad2c619",
+            "id": "bff623f9-4f80-4868-be9c-1ee28e104c4e",
             "name": "Supabase: claims",
             "credentials": {
                 "supabaseApi": {
@@ -727,10 +719,10 @@
             "type": "n8n-nodes-base.supabase",
             "typeVersion": 1,
             "position": [
-                3168,
+                4112,
                 96
             ],
-            "id": "0a74178f-eab4-416f-b087-07f6f5f960b7",
+            "id": "05156b87-330f-40fa-a70c-a9417a813d32",
             "name": "Supabase: claim_documents",
             "credentials": {
                 "supabaseApi": {
@@ -741,15 +733,15 @@
         },
         {
             "parameters": {
-                "jsCode": "const items = $input.all();\nlet masterClaim = {};\nlet aiFailed = false;\n\nfor (const item of items) {\n  try {\n    const data = JSON.parse(item.json.content.replace(/```json/g, '').replace(/```/g, '').trim());\n    masterClaim = { ...masterClaim, ...data };\n  } catch (e) {\n    // If the AI spits out garbage, we catch it here!\n    aiFailed = true; \n  }\n}\n\n// Pass the failure flag forward so Quality Control knows\nmasterClaim.ai_parsing_failed = aiFailed;\n\nreturn [{\n  json: { content: JSON.stringify(masterClaim) }\n}];"
+                "jsCode": "const items = $input.all();\nlet allData = [];\n\nfor (const item of items) {\n  allData.push(item.json.content);\n}\n\nreturn [{\n  json: { \n    all_evidence: allData \n  }\n}];"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                2048,
+                2240,
                 96
             ],
-            "id": "d36d282d-2ee4-47d4-9e51-1df9cd4ce071",
+            "id": "fbcd6586-6da1-496c-b634-deb5699e1186",
             "name": "Bundle Claim Data"
         },
         {
@@ -759,23 +751,23 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                2720,
+                3664,
                 96
             ],
-            "id": "a7b2b23a-3d3e-465c-b742-0043a49badba",
+            "id": "d9e7db7c-5fa2-48e1-87db-99ee3e5da83c",
             "name": "Link Files to Claim"
         },
         {
             "parameters": {
-                "jsCode": "// Read the bundled claim data\nlet data = JSON.parse($input.first().json.content);\n\n// --- 1. SCHEMA VALIDATION ---\nconst required = ['policy_number', 'claimant_name', 'incident_date', 'incident_type', 'incident_description', 'claimed_amount'];\nconst missing = required.filter(field => !data[field]);\nconst errors = [];\n\nif (data.claimed_amount && typeof data.claimed_amount !== 'number') errors.push('claimed_amount must be a number');\nif (data.incident_date && !/^\\d{4}-\\d{2}-\\d{2}$/.test(data.incident_date)) errors.push('invalid date format');\n\n// --- 2. CONFIDENCE CALCULATION ---\nconst confidences = data.field_confidence || {};\nconst critical = ['policy_number', 'claimant_name', 'incident_date', 'claimed_amount'];\n\nlet critSum = 0, nonCritSum = 0, critCount = 0, nonCritCount = 0;\n\nObject.keys(confidences).forEach(key => {\n  if (critical.includes(key)) { critSum += confidences[key]; critCount++; }\n  else { nonCritSum += confidences[key]; nonCritCount++; }\n});\n\nconst avgCritical = critCount > 0 ? (critSum / critCount) : 0;\nconst avgNonCritical = nonCritCount > 0 ? (nonCritSum / nonCritCount) : 0;\nconst overallConfidence = (0.7 * avgCritical) + (0.3 * avgNonCritical);\n\n// --- 3. FINAL VERDICT ---\ndata.overall_confidence = overallConfidence;\ndata.validation_errors = errors;\ndata.missing_fields = missing;\n\n// If confidence is low, fields are missing, OR the AI returned bad JSON, flag it\ndata.needs_review = data.ai_parsing_failed || overallConfidence < 0.85 || missing.length > 0 || errors.length > 0;\n\n// Pass it forward as a string so your Supabase node doesn't break\nreturn [{\n  json: {\n    content: JSON.stringify(data)\n  }\n}];"
+                "jsCode": "// 1. SAFELY GRAB AND PARSE THE AI OUTPUT\nlet rawContent = $input.first().json.content; \n\n// Fallback: If you didn't use a \"Set\" node and wired the HTTP Request directly, this finds the text.\nif (!rawContent && $input.first().json.choices) {\n    rawContent = $input.first().json.choices[0].message.content;\n}\n\nlet data = {};\nlet aiFailed = false;\n\ntry {\n    // Strip markdown formatting just in case the AI disobeys instructions\n    const cleanContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();\n    data = JSON.parse(cleanContent);\n} catch (e) {\n    // If the AI outputs complete garbage, we catch the crash safely here\n    aiFailed = true;\n}\n\n// --- 2. SCHEMA VALIDATION ---\nconst required = ['policy_number', 'claimant_name', 'incident_date', 'incident_type', 'incident_description', 'claimed_amount'];\nconst missing = required.filter(field => !data[field]);\nconst errors = [];\n\nif (data.claimed_amount && typeof data.claimed_amount !== 'number') errors.push('claimed_amount must be a number');\nif (data.incident_date && !/^\\d{4}-\\d{2}-\\d{2}$/.test(data.incident_date)) errors.push('invalid date format');\n\n// --- 3. CONFIDENCE CALCULATION ---\nconst confidences = data.field_confidence || {};\nconst critical = ['policy_number', 'claimant_name', 'incident_date', 'claimed_amount'];\n\nlet critSum = 0, nonCritSum = 0, critCount = 0, nonCritCount = 0;\n\nObject.keys(confidences).forEach(key => {\n  if (critical.includes(key)) { critSum += confidences[key]; critCount++; }\n  else { nonCritSum += confidences[key]; nonCritCount++; }\n});\n\nconst avgCritical = critCount > 0 ? (critSum / critCount) : 0;\nconst avgNonCritical = nonCritCount > 0 ? (nonCritSum / nonCritCount) : 0;\nconst overallConfidence = (0.7 * avgCritical) + (0.3 * avgNonCritical);\n\n// --- 4. FINAL VERDICT ---\ndata.overall_confidence = overallConfidence || 0;\ndata.validation_errors = errors;\ndata.missing_fields = missing;\ndata.ai_parsing_failed = aiFailed;\n\n// If confidence is low, fields are missing, OR the AI returned bad JSON, flag for human review\ndata.needs_review = aiFailed || data.overall_confidence < 0.85 || missing.length > 0 || errors.length > 0;\n\n// Pass it forward as a string so your downstream Supabase nodes remain perfectly intact\nreturn [{\n  json: {\n    content: JSON.stringify(data)\n  }\n}];"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                2272,
+                2752,
                 96
             ],
-            "id": "763d0ca0-8848-4454-a519-3badc134299c",
+            "id": "4d0fe6e7-700d-4de5-ad14-b12f56439b87",
             "name": "Quality Control"
         },
         {
@@ -788,11 +780,80 @@
             "type": "n8n-nodes-base.crypto",
             "typeVersion": 1,
             "position": [
-                2944,
+                3888,
                 96
             ],
-            "id": "9f1e2de5-7ef8-4631-a005-8c1990d74605",
+            "id": "a1f49d72-bdd8-4e69-b2b7-be0aa9b114a7",
             "name": "Crypto"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Grab the intact AI data from BEFORE the database lookup wiped it\nconst aiData = $('Quality Control').first().json;\n\n// Grab the newly found Policy UUID\nconst policyData = $input.first().json;\n\n// Attach the UUID safely into the AI package\naiData.real_policy_uuid = policyData.id;\n\nreturn [{ json: aiData }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                3184,
+                96
+            ],
+            "id": "173edcf9-be85-4837-b29f-3dd7e4127a4f",
+            "name": "Restore AI Data"
+        },
+        {
+            "parameters": {
+                "operation": "getAll",
+                "tableId": "policies",
+                "filters": {
+                    "conditions": [
+                        {
+                            "keyName": "policy_number",
+                            "condition": "eq",
+                            "keyValue": "={{ JSON.parse($json.content).policy_number }}"
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                2976,
+                96
+            ],
+            "id": "75177855-d4a3-439e-ae9f-8fda69c6098c",
+            "name": "Lookup Policy",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "PUicmWoK6FjwpQcO",
+                    "name": "Supabase account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://openrouter.ai/api/v1/chat/completions",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{\n  JSON.stringify({\n    \"model\": \"google/gemma-3-12b-it\",\n    \"messages\": [\n      {\n        \"role\": \"system\",\n        \"content\": \"You are a Master Insurance Claim Consolidator. You are given an array of JSON extractions taken from various partial documents (claim forms, invoices, etc.) for ONE single insurance claim. Your job is to merge them into ONE perfect JSON object.\"\n      },\n      {\n        \"role\": \"user\",\n        \"content\": \"Merge these extractions based on these strict rules:\\n1. Best Value Wins: If a field is `null` in one document but has a value in another, keep the value.\\n2. Max Confidence: For the `field_confidence` object, compare the scores across all documents for each field and output ONLY the highest score (e.g., if File A has 1.0 and File B has 0.0, the final score must be 1.0).\\n3. Smart Warnings: Consolidate the `warnings` array, BUT you must REMOVE any warnings complaining about 'missing' fields (like policy number, phone, or invoice) IF that specific field was successfully found in another document. Do not penalize partial documents like receipts for lacking a policy number.\\n4. Strict Output: Return ONLY the final valid JSON object. Do not include markdown formatting (like ```json) or any preamble.\\n\\nEVIDENCE TO MERGE:\\n\" + JSON.stringify($json.all_evidence)\n      }\n    ]\n  })\n}}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                2496,
+                96
+            ],
+            "id": "bcb7f3ae-d84a-41b2-9af3-f5ceb081177d",
+            "name": "Final Analysis",
+            "retryOnFail": true,
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "byhVHDovoyzw1jgL",
+                    "name": "OpenRouter Key"
+                }
+            }
         }
     ],
     "pinData": {},
@@ -1035,7 +1096,12 @@
                 ]
             ]
         },
-        "File Upload": {
+        "Supabase Storage S3": {
+            "main": [
+                []
+            ]
+        },
+        "Webhook": {
             "main": [
                 [
                     {
@@ -1044,11 +1110,6 @@
                         "index": 0
                     }
                 ]
-            ]
-        },
-        "Supabase Storage S3": {
-            "main": [
-                []
             ]
         },
         "Supabase: claims": {
@@ -1066,7 +1127,7 @@
             "main": [
                 [
                     {
-                        "node": "Quality Control",
+                        "node": "Final Analysis",
                         "type": "main",
                         "index": 0
                     }
@@ -1084,16 +1145,11 @@
                 ]
             ]
         },
-        "Supabase: claim_documents": {
-            "main": [
-                []
-            ]
-        },
         "Quality Control": {
             "main": [
                 [
                     {
-                        "node": "Supabase: claims",
+                        "node": "Lookup Policy",
                         "type": "main",
                         "index": 0
                     }
@@ -1110,9 +1166,42 @@
                     }
                 ]
             ]
+        },
+        "Restore AI Data": {
+            "main": [
+                [
+                    {
+                        "node": "Supabase: claims",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Lookup Policy": {
+            "main": [
+                [
+                    {
+                        "node": "Restore AI Data",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Final Analysis": {
+            "main": [
+                [
+                    {
+                        "node": "Quality Control",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         }
     },
-    "active": false,
+    "active": true,
     "settings": {
         "executionOrder": "v1",
         "availableInMCP": false,
@@ -1120,7 +1209,7 @@
         "timezone": "Asia/Kolkata",
         "callerPolicy": "workflowsFromSameOwner"
     },
-    "versionId": "4d26bc5c-e0a2-4353-a050-df29f8217e6e",
+    "versionId": "68f7c4ba-3b2a-4181-b19c-6d321b2f54a1",
     "meta": {
         "templateCredsSetupCompleted": true,
         "instanceId": "4f1e427b282371d32fa46454864796f49434b405cfa93f59698532fbfbd9081b"
