@@ -40,6 +40,8 @@ const filters = ['All Claims', 'In Review', 'Action Required', 'Settled']
 export default function ClaimsPage() {
     const navigate = useNavigate()
     const [activeFilter, setActiveFilter] = useState('All Claims')
+    const [searchQuery, setSearchQuery] = useState('')
+    const [isSearching, setIsSearching] = useState(false)
 
     const { user } = useAuth()
     const { data, loading, error } = useFetch(user?.email ? `/api/customer/claims?email=${encodeURIComponent(user.email)}` : null)
@@ -47,50 +49,94 @@ export default function ClaimsPage() {
 
     const filtered = claims.filter(c => {
         const t = getClaimType(c)
-        if (activeFilter === 'All Claims') return true
-        if (activeFilter === 'In Review') return t === 'reviewing'
-        if (activeFilter === 'Action Required') return t === 'action'
-        if (activeFilter === 'Settled') return t === 'settled'
+        let passFilter = true
+        if (activeFilter === 'In Review') passFilter = t === 'reviewing'
+        else if (activeFilter === 'Action Required') passFilter = t === 'action'
+        else if (activeFilter === 'Settled') passFilter = t === 'settled'
+
+        if (!passFilter) return false
+
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase()
+            return (
+                c.claim_number?.toLowerCase().includes(q) ||
+                (c.title || '').toLowerCase().includes(q) ||
+                (c.policy?.policy_type || '').toLowerCase().includes(q) ||
+                (c.provider_name || '').toLowerCase().includes(q)
+            )
+        }
         return true
     })
 
     return (
         <div className="min-h-screen bg-background-dark text-slate-100 font-display antialiased selection:bg-primary selection:text-white flex flex-col pb-32">
-            <Header showBack />
+            <Header />
             <main className="mx-auto w-full max-w-4xl px-4 pt-6 space-y-6">
 
                 {/* Header section */}
-                <div className="bg-surface-dark-customer border border-surface-border rounded-2xl p-6 relative overflow-hidden">
-                    <div className="relative z-10">
+                <div className="bg-surface-dark-customer border border-surface-border rounded-2xl p-6 relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="relative z-10 flex-1">
                         <h1 className="text-3xl font-bold text-white tracking-tight">Claims</h1>
                         <p className="text-slate-400 text-sm mt-1">Manage and track your insurance claims</p>
                     </div>
-                    {/* Background decoration */}
-                    <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-9xl text-surface-border opacity-50 z-0">receipt_long</span>
-                </div>
-
-                {/* Actions */}
-                <div className="flex flex-col sm:flex-row gap-4">
                     <button
                         onClick={() => navigate('/customer/file-claim')}
-                        className="flex-1 bg-primary hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+                        className="relative z-10 bg-primary hover:bg-red-600 text-white font-bold py-2.5 px-5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20 shrink-0"
                     >
                         <span className="material-symbols-outlined text-[20px]">add_circle</span>
                         File a New Claim
                     </button>
-                    <button className="flex-1 bg-transparent border border-surface-border hover:bg-surface-border text-slate-300 hover:text-white font-bold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2">
-                        <span className="material-symbols-outlined text-[20px]">search</span>
-                        Track Existing
-                    </button>
+                    {/* Background decoration */}
+                    <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-9xl text-surface-border opacity-50 z-0 pointer-events-none">receipt_long</span>
                 </div>
 
-                {/* Filter pills */}
+                {/* Filter pills & Search */}
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    {!isSearching ? (
+                        <button
+                            onClick={() => setIsSearching(true)}
+                            className="shrink-0 bg-surface-dark-customer border border-surface-border hover:bg-surface-border text-slate-300 hover:text-white font-medium py-1.5 px-4 rounded-full transition-colors flex items-center justify-center gap-1 text-xs"
+                        >
+                            <span className="material-symbols-outlined text-[14px]">search</span>
+                            Track Existing
+                        </button>
+                    ) : (
+                        <div className="relative shrink-0 flex items-center">
+                            <span className="material-symbols-outlined absolute left-3 text-[14px] text-slate-400 pointer-events-none">search</span>
+                            <input
+                                autoFocus
+                                type="text"
+                                placeholder="Enter claim ID..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onBlur={() => { if (!searchQuery) setIsSearching(false) }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Escape') {
+                                        setSearchQuery('')
+                                        setIsSearching(false)
+                                    }
+                                }}
+                                className="bg-surface-dark-customer border border-primary/50 text-white text-xs rounded-full py-1.5 pl-8 pr-8 w-40 sm:w-48 focus:outline-none focus:border-primary placeholder:text-slate-500 transition-all font-sans"
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => {
+                                        setSearchQuery('')
+                                        setIsSearching(false)
+                                    }}
+                                    className="absolute right-2 text-slate-400 hover:text-white flex items-center justify-center p-1"
+                                >
+                                    <span className="material-symbols-outlined text-[14px]">close</span>
+                                </button>
+                            )}
+                        </div>
+                    )}
+                    <div className="w-px h-4 bg-surface-border mx-1 shrink-0" />
                     {filters.map(f => (
                         <button
                             key={f}
                             onClick={() => setActiveFilter(f)}
-                            className={`px-4 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors ${activeFilter === f
+                            className={`px-4 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors shrink-0 ${activeFilter === f
                                 ? 'bg-primary text-white border-primary'
                                 : 'bg-surface-dark-customer border-surface-border text-slate-400 hover:text-white hover:border-slate-500'
                                 }`}
@@ -123,6 +169,7 @@ export default function ClaimsPage() {
                                 return (
                                     <div
                                         key={claim.id}
+                                        onClick={() => navigate(`/customer/claim-status?id=${claim.id}`)}
                                         className={`bg-surface-dark-customer border border-surface-border border-l-4 ${s.border} rounded-xl p-5 transition-colors group cursor-pointer ${type === 'settled' ? 'hover:border-emerald-500/40 opacity-75 hover:opacity-100' : 'hover:border-primary/40'}`}
                                     >
                                         {/* Claim header */}

@@ -210,6 +210,44 @@ async def get_customer_claims(email: str = Query(...)):
         
     return {"claims": enhanced_claims}
 
+@router.get("/claims/{claim_id}")
+async def get_customer_claim_detail(claim_id: str, email: str = Query(...)):
+    db = get_supabase()
+    
+    # Securely verify policy ownership first
+    policies = db.table("policies").select("id, policy_number, holder_name").eq("holder_email", email).execute()
+    if not policies.data:
+        raise HTTPException(status_code=404, detail="Claim not found or access denied")
+        
+    policy_ids = [p["id"] for p in policies.data]
+    holder_name = policies.data[0].get("holder_name") if policies.data else None
+    
+    # Fetch specific claim
+    query = db.table("claims").select("*").eq("id", claim_id).in_("policy_id", policy_ids)
+    if holder_name:
+        query = query.ilike("claimant_name", f"%{holder_name}%")
+        
+    claim_res = query.execute()
+    if not claim_res.data:
+        raise HTTPException(status_code=404, detail="Claim not found or access denied")
+        
+    claim = claim_res.data[0]
+    
+    # Map back the specific policy info
+    policy = next((p for p in policies.data if p["id"] == claim["policy_id"]), None)
+    claim["policy"] = policy
+
+    # Parse JSON structured outputs so the frontend can safely bind and format them
+    import json
+    for json_col in ["extraction_raw", "decision_output", "current_state_context", "fraud_analysis"]:
+        if claim.get(json_col):
+            try:
+                claim[json_col] = json.loads(claim[json_col]) if isinstance(claim[json_col], str) else claim[json_col]
+            except:
+                pass
+                
+    return claim
+
 @router.get("/dashboard-stats")
 async def get_dashboard_stats(email: str = Query(...)):
     db = get_supabase()

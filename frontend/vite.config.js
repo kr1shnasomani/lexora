@@ -12,7 +12,7 @@ export default defineConfig({
                 changeOrigin: true,
             },
             '/n8n': {
-                target: 'http://localhost:5678',
+                target: 'http://10.149.50.194:5678',
                 changeOrigin: true,
                 rewrite: (path) => path.replace(/^\/n8n/, ''),
             },
