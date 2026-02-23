@@ -5,6 +5,7 @@ import { useFetch } from '../../hooks/useFetch'
 import { Skeleton } from '../../components/shared/Skeleton'
 import ErrorToast from '../../components/shared/ErrorToast'
 import { useState } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
 
 const accountMenuItems = [
     { icon: 'person', label: 'Personal Details', sub: 'Name, Phone, Email', route: null },
@@ -45,8 +46,12 @@ function MenuGroup({ title, items, navigate }) {
 
 export default function ProfilePage() {
     const navigate = useNavigate()
+    const { user } = useAuth()
     const [toastError, setToastError] = useState(null)
-    const { data: profile, loading, error } = useFetch('/api/user/profile')
+
+    const profileUrl = user?.email ? `/api/user/profile?email=${encodeURIComponent(user.email)}` : null
+    const { data: profile, loading, error } = useFetch(profileUrl)
+
     if (error && !toastError) setToastError(error)
 
     return (
@@ -86,7 +91,7 @@ export default function ProfilePage() {
                         : [
                             { value: profile?.policy_count ?? '—', label: 'Policies', valueClass: 'text-white' },
                             { value: profile?.active_claim_count ?? '—', label: 'Claims', valueClass: 'text-white' },
-                            { value: '100%', label: 'Coverage', valueClass: 'text-emerald-400' },
+                            { value: profile?.policy_count > 0 ? '100%' : 'None', label: 'Coverage', valueClass: profile?.policy_count > 0 ? 'text-emerald-400' : 'text-slate-500' },
                         ].map(s => (
                             <div key={s.label} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-surface-dark-customer border border-surface-border">
                                 <span className={`text-2xl font-bold ${s.valueClass}`}>{s.value}</span>

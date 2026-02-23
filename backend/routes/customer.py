@@ -248,6 +248,46 @@ async def get_customer_claim_detail(claim_id: str, email: str = Query(...)):
                 
     return claim
 
+@router.get("/claims/download/{document_id}")
+async def download_claim_document(document_id: str, email: str = Query(...)):
+    db = get_supabase()
+    
+    # Securely verify policy ownership first
+    policies = db.table("policies").select("id, holder_name").eq("holder_email", email).execute()
+    if not policies.data:
+        raise HTTPException(status_code=404, detail="Document not found or access denied")
+        
+    policy_ids = [p["id"] for p in policies.data]
+    holder_name = policies.data[0].get("holder_name") if policies.data else None
+    
+    # Verify document exists and belongs to a claim owned by user
+    doc_res = db.table("claim_documents").select("*").eq("id", document_id).execute()
+    if not doc_res.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    doc = doc_res.data[0]
+    
+    # Secure the claim
+    query = db.table("claims").select("id").eq("id", doc["claim_id"]).in_("policy_id", policy_ids)
+    if holder_name:
+        query = query.ilike("claimant_name", f"%{holder_name}%")
+        
+    claim_res = query.execute()
+    if not claim_res.data:
+        raise HTTPException(status_code=404, detail="Document not found or access denied")
+        
+    # Generate temporary signed URL from Supabase Storage
+    try:
+        # File paths in Supabase are mapped under storage_key (e.g. n8n_execution_id/filename)
+        # If storage_key is missing for some reason, fallback to the uuid format
+        file_path = doc.get('storage_key') or f"{doc['claim_id']}/{doc['file_name']}"
+        signed_url = db.storage.from_("claim_documents").create_signed_url(file_path, 60 * 5) # 5 min expiry
+        
+        return {"url": signed_url["signedURL"]}
+    except Exception as e:
+        print(f"Failed to generate signed URL: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate download link")
+
 @router.get("/dashboard-stats")
 async def get_dashboard_stats(email: str = Query(...)):
     db = get_supabase()
@@ -289,3 +329,153 @@ async def get_dashboard_stats(email: str = Query(...)):
         "claims_in_progress": in_progress,
         "recent_claims": recent
     }
+
+# Note: Placing this here for simplicity since frontend specifically calls /api/user/profile
+user_router = APIRouter(prefix="/user", tags=["User"])
+
+@user_router.get("/profile")
+async def get_user_profile(email: str = Query(...)):
+    db = get_supabase()
+    
+    # 1. Fetch User Data
+    user_res = db.table("users").select("*").eq("email", email).execute()
+    if not user_res.data:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user_data = user_res.data[0]
+    
+    # Format Joined Date
+    member_since = "Unknown"
+    if user_data.get("created_at"):
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(user_data["created_at"].replace("Z", "+00:00").split(".")[0] + "+00:00")
+            member_since = dt.strftime("%B %Y")  # e.g., "February 2026"
+        except:
+            pass
+            
+    # 2. Compile Stats
+    policies = db.table("policies").select("id").eq("holder_email", email).eq("is_active", True).execute()
+    policy_count = len(policies.data or [])
+    
+    active_claim_count = 0
+    if policy_count > 0:
+        policy_ids = [p["id"] for p in (policies.data or [])]
+        claims = db.table("claims").select("status").in_("policy_id", policy_ids).execute()
+        active_claim_count = sum(1 for c in (claims.data or []) if c["status"] not in ("finalized", "error", "rejected", "denied"))
+        
+    return {
+        "name": user_data.get("full_name"),
+        "email": user_data.get("email"),
+        "member_since": member_since,
+        "policy_count": policy_count,
+        "active_claim_count": active_claim_count
+    }
+
+# Notifications Virtual Integration
+notifications_router = APIRouter(prefix="/notifications", tags=["Notifications"])
+
+@notifications_router.get("")
+async def get_notifications(email: str = Query(...)):
+    db = get_supabase()
+    
+    # 1. Fetch user policies
+    policies = db.table("policies").select("id, policy_number, created_at").eq("holder_email", email).execute()
+    policy_ids = [p["id"] for p in (policies.data or [])]
+    
+    # 2. Fetch user claims
+    claims = []
+    if policy_ids:
+        claims_res = db.table("claims").select("id, claim_number, status, created_at, updated_at").in_("policy_id", policy_ids).execute()
+        claims = claims_res.data or []
+        
+    notifications = []
+    from datetime import datetime
+    
+    def format_time(iso_str):
+        if not iso_str: return "Just now"
+        try:
+            dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00").split(".")[0] + "+00:00")
+            return dt.strftime("%b %d, %Y")
+        except:
+            return "Recently"
+            
+    # Map Policies
+    for p in (policies.data or []):
+        notifications.append({
+            "id": f"pol_{p['id']}",
+            "unread": False,
+            "icon": "policy",
+            "color": "text-emerald-400",
+            "title": "Coverage Activated",
+            "desc": f"Your Lexora Policy {p.get('policy_number', '')} is now active.",
+            "time": format_time(p.get("created_at")),
+            "_raw": p.get("created_at") or ""
+        })
+        
+    # Map Claims
+    for c in claims:
+        # Submission
+        notifications.append({
+            "id": f"clm_sub_{c['id']}",
+            "unread": False,
+            "icon": "description",
+            "color": "text-amber-400",
+            "title": "Claim Received",
+            "desc": f"Claim {c.get('claim_number')} was submitted successfully.",
+            "time": format_time(c.get("created_at")),
+            "_raw": c.get("created_at") or ""
+        })
+        
+        # Status
+        status = c.get("status", "")
+        if status in ["approved", "settled", "finalized"]:
+            notifications.append({
+                "id": f"clm_app_{c['id']}",
+                "unread": True,
+                "icon": "check_circle",
+                "color": "text-emerald-400",
+                "title": "Claim Approved",
+                "desc": f"Claim {c.get('claim_number')} has been approved for payout.",
+                "time": format_time(c.get("updated_at")),
+                "_raw": c.get("updated_at") or c.get("created_at") or ""
+            })
+        elif status in ["rejected", "denied", "error"]:
+            notifications.append({
+                "id": f"clm_rej_{c['id']}",
+                "unread": True,
+                "icon": "cancel",
+                "color": "text-red-400",
+                "title": "Claim Update",
+                "desc": f"Claim {c.get('claim_number')} was marked as {status}.",
+                "time": format_time(c.get("updated_at")),
+                "_raw": c.get("updated_at") or c.get("created_at") or ""
+            })
+            
+    # Sort descending
+    notifications.sort(key=lambda x: x["_raw"], reverse=True)
+    
+    for n in notifications:
+        n.pop("_raw", None)
+        
+    return notifications
+
+@notifications_router.get("/prefs")
+async def get_notif_prefs(email: str = Query(...)):
+    # Mock persistent settings natively without schema additions
+    return [
+        {"key": "email_alerts", "label": "Email Alerts", "enabled": True},
+        {"key": "sms_updates", "label": "SMS Updates", "enabled": False},
+        {"key": "push_claims", "label": "Push Notification - Claims", "enabled": True},
+        {"key": "marketing", "label": "Marketing Updates", "enabled": False}
+    ]
+
+from pydantic import BaseModel
+class PrefUpdate(BaseModel):
+    key: str
+    enabled: bool
+
+@notifications_router.put("/prefs")
+async def update_notif_pref(pref: PrefUpdate, email: str = Query(...)):
+    # Mock success natively back to the caller
+    return {"status": "success", "message": f"Preference {pref.key} updated"}
