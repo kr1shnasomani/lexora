@@ -1,6 +1,7 @@
 """Lexora Backend — FastAPI Application"""
 import sys
 import os
+import asyncio
 
 # Add backend dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -8,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import get_settings
-from routes.claims import router as claims_router
+from routes.claims import router as claims_router, process_pending
 from routes.webhooks import router as webhooks_router
 from routes.customer import router as customer_router, user_router, notifications_router
 from routes.dashboard import router as dashboard_router
@@ -40,6 +41,25 @@ app.include_router(user_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on server boot."""
+    async def claim_sweeper():
+        while True:
+            try:
+                # Log active sweep (remove in production if too noisy)
+                print("[System] Running automated background claim sweep...")
+                res = await process_pending()
+                if res.get("processed_count", 0) > 0:
+                    print(f"[System] Swept {res['processed_count']} active claims. Log: {res.get('logs')}")
+            except Exception as e:
+                print(f"[System] Automated pipeline sweeper error: {e}")
+            
+            # Run every 30 seconds
+            await asyncio.sleep(30)
+            
+    asyncio.create_task(claim_sweeper())
 
 @app.get("/")
 async def root():
