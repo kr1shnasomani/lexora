@@ -40,7 +40,7 @@ const Sidebar = () => {
                 </div>
                 <Link to="/admin/claims" className={linkClass('/admin/claims')}>
                     <span className="material-symbols-outlined">description</span>
-                    <span className="font-medium hidden lg:block">Claims Queue</span>
+                    <span className="font-medium hidden lg:block">Manual Review</span>
                 </Link>
                 <Link to="/admin/audit" className={linkClass('/admin/audit')}>
                     <span className="material-symbols-outlined">fact_check</span>
