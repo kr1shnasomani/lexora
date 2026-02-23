@@ -43,9 +43,9 @@ except ImportError:
     sys.exit(1)
 
 # -- Configuration -----------------------------------------------------------
-BASE_URL = os.environ.get("LEXORA_API_URL", "http://localhost:8000")
+BASE_URL = os.environ.get("LEXORA_API_URL", "http://127.0.0.1:8000")
 API_PREFIX = "/api/claims"
-CLAIM_LIMIT = 5
+CLAIM_LIMIT = 50
 
 
 # ===========================================================================
