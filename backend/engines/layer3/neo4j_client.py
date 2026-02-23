@@ -17,8 +17,11 @@ class Neo4jConnector:
         self.driver: Optional['Driver'] = None
         
         uri = cfg.get("neo4j_uri")
-        user = cfg.get("neo4j_user", "neo4j")
+        user = cfg.get("neo4j_user")
         password = cfg.get("neo4j_password")
+        
+        db_name = cfg.get("neo4j_database")
+        self.db_args = {"database": db_name} if db_name else {}
         
         if NEO4J_AVAILABLE and uri and password:
             try:
@@ -29,6 +32,7 @@ class Neo4jConnector:
                     connection_timeout=cfg.get("neo4j_timeout_seconds", 5),
                     max_transaction_retry_time=cfg.get("neo4j_timeout_seconds", 5)
                 )
+                self.driver.verify_connectivity(**self.db_args)
             except Exception:
                 self.driver = None
 
@@ -45,7 +49,8 @@ class Neo4jConnector:
         if not self.driver:
             return False, "Neo4j not initialized", int(time.time()*1000) - start_ms
             
-        db_name = self.cfg.get("neo4j_database", "neo4j")
+        db_name = self.cfg.get("neo4j_database")
+        db_args = {"database": db_name} if db_name else {}
         
         # Cypher: MERGE Claim, then UNWIND entities, MERGE entity, MERGE relationship
         query = """
@@ -58,7 +63,7 @@ class Neo4jConnector:
         """
         
         try:
-            with self.driver.session(database=db_name) as session:
+            with self.driver.session(**db_args) as session:
                 session.run(query, claim_id=claim_id, entities=entities)
             elapsed = int(time.time() * 1000) - start_ms
             return True, None, elapsed
@@ -75,7 +80,8 @@ class Neo4jConnector:
         if not self.driver:
             return {}, "Neo4j not initialized", int(time.time()*1000) - start_ms
             
-        db_name = self.cfg.get("neo4j_database", "neo4j")
+        db_name = self.cfg.get("neo4j_database")
+        db_args = {"database": db_name} if db_name else {}
         
         # Convert graph hops to pattern lengths since Claim->Entity->Claim is 2 hops in cypher.
         # User defined max_hops = 2 usually means 2 claim-to-claim hops (4 relationship hops).
@@ -93,12 +99,12 @@ class Neo4jConnector:
         """
 
         try:
-            with self.driver.session(database=db_name) as session:
+            with self.driver.session(**db_args) as session:
                 result = session.run(query, claim_id=claim_id)
-                record = result.single()
+                records = list(result)
                 
-            nodes = record["unique_nodes"] if record else []
-            rels = record["unique_rels"] if record else []
+            nodes = records[0]["unique_nodes"] if records else []
+            rels = records[0]["unique_rels"] if records else []
             
             claims_count = sum(1 for n in nodes if "Claim" in n.labels)
             

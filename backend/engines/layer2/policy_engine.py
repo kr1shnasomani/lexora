@@ -523,12 +523,18 @@ def _run_core_checks(
 
     missing_docs: list[str] = []
     for req_doc in required_doc_types:
-        # Check if any uploaded file matches the required doc type
-        hints = filename_hints.get(req_doc, [req_doc.replace("_", " ")])
-        matched = any(
-            any(h.lower() in name for h in hints)
-            for name in uploaded_names
-        )
+        # Generate clean hints (no spaces, no underscores)
+        raw_hints = filename_hints.get(req_doc, [req_doc])
+        clean_hints = [h.lower().replace("_", "").replace(" ", "") for h in raw_hints]
+        
+        # Check if any clean hint is in any uploaded name
+        matched = False
+        for name in uploaded_names:
+            clean_name = name.replace("_", "").replace(" ", "")
+            if any(hint in clean_name for hint in clean_hints):
+                matched = True
+                break
+                
         if not matched:
             missing_docs.append(req_doc)
 

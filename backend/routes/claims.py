@@ -338,24 +338,14 @@ async def run_full_pipeline(claim_id: str):
         fraud_result = run_fraud_check(claim_id)
         results["fraud"] = fraud_result
         
-        # Check if Layer 2 requested a manual review
-        policy_decision = current.get("policy_decision") or {}
-        if isinstance(policy_decision, str):
-            policy_decision = json.loads(policy_decision)
-            
-        needs_review = policy_decision.get("outcome", {}).get("status") == "REVIEW"
-        
-        next_status = "under_review" if needs_review else "deciding"
+        # We always proceed to deciding so Layer 4 can weigh fraud vs policy review
+        next_status = "deciding"
         
         db.table("claims").update({
             "fraud_score": fraud_result["fraud_score"],
             "fraud_analysis": json.dumps(fraud_result["fraud_analysis"]),
             "status": next_status,
         }).eq("id", claim_id).execute()
-        
-        if needs_review:
-            results["new_status"] = "under_review"
-            return results
 
     # Step 3: Decision
     current = db.table("claims").select("status").eq("id", claim_id).single().execute().data
