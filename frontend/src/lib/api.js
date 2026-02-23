@@ -39,3 +39,28 @@ export const api = {
     put: (path, body) => request('PUT', path, body),
     delete: (path) => request('DELETE', path),
 }
+
+export const downloadClaimPDF = async (claimId, email) => {
+    // Assuming BASE_URL from the file scope to keep it uniform
+    const url = `${BASE_URL}/api/claims/${claimId}/export-pdf?email=${encodeURIComponent(email)}`;
+    const response = await fetch(url, {
+        method: 'GET',
+    });
+
+    if (!response.ok) {
+        let msg = 'Failed to generate PDF';
+        try {
+            const data = await response.json();
+            if (data.detail) msg = data.detail;
+        } catch (e) { }
+        throw new Error(msg);
+    }
+
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `Lexora_Claim_${claimId}.pdf`;
+    a.click();
+    window.URL.revokeObjectURL(blobUrl);
+}
