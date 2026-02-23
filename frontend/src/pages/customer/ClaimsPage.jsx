@@ -7,18 +7,21 @@ import { useAuth } from '../../contexts/AuthContext'
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 function getClaimType(claim) {
-    const s = (claim.final_decision || claim.status || '').toLowerCase()
-    if (['approved', 'auto_approve', 'finalized'].some(k => s.includes(k))) return 'settled'
-    if (['manual_review', 'under_review', 'fraud', 'deciding', 'checking'].some(k => s.includes(k))) return 'reviewing'
-    if (['error'].includes(s)) return 'action'
+    const finalDec = (claim.final_decision || '').toLowerCase()
+    const s = (claim.status || '').toLowerCase()
+
+    if (finalDec.includes('reject') || s.includes('reject')) return 'rejected'
+    if (finalDec.includes('approve') || ['approved', 'settled', 'finalized'].includes(s)) return 'settled'
+    if (['error', 'action'].some(k => s.includes(k))) return 'action'
     return 'reviewing'
 }
 
 function getStatusStyle(claim) {
     const t = getClaimType(claim)
-    if (t === 'settled') return { color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20', border: 'border-l-emerald-500', label: 'Settled' }
-    if (t === 'action') return { color: 'bg-primary/10 text-primary border-primary/20', border: 'border-l-primary', label: 'Action Required' }
-    return { color: 'bg-amber-500/10 text-amber-500 border-amber-500/20', border: 'border-l-amber-500', label: 'Reviewing' }
+    if (t === 'settled') return { color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20', border: 'border-l-emerald-500', label: 'Approved' }
+    if (t === 'rejected') return { color: 'bg-primary/10 text-primary border-primary/20', border: 'border-l-primary', label: 'Rejected' }
+    if (t === 'action') return { color: 'bg-amber-500/10 text-amber-500 border-amber-500/20', border: 'border-l-amber-500', label: 'Action Required' }
+    return { color: 'bg-blue-500/10 text-blue-500 border-blue-500/20', border: 'border-l-blue-500', label: 'Reviewing' }
 }
 
 function getPayout(claim) {
@@ -27,14 +30,14 @@ function getPayout(claim) {
     return '—'
 }
 
-const PROGRESS_STEPS = ['Filed', 'Review', 'Approval', 'Payout']
+const PROGRESS_STEPS = ['Filed', 'Review', 'Decision', 'Completed']
 
 function progressIndex(status) {
     const map = { submitted: 0, extracting: 0, extracted: 1, policy_evaluating: 1, fraud_checking: 2, deciding: 2, finalized: 3, under_review: 2, fraud_investigation: 2, error: 1 }
     return map[status] ?? 0
 }
 
-const filters = ['All Claims', 'In Review', 'Action Required', 'Settled']
+const filters = ['All Claims', 'In Review', 'Action Required', 'Completed']
 
 /* ─── Page ─────────────────────────────────────────────────────────── */
 export default function ClaimsPage() {
@@ -52,7 +55,7 @@ export default function ClaimsPage() {
         let passFilter = true
         if (activeFilter === 'In Review') passFilter = t === 'reviewing'
         else if (activeFilter === 'Action Required') passFilter = t === 'action'
-        else if (activeFilter === 'Settled') passFilter = t === 'settled'
+        else if (activeFilter === 'Completed') passFilter = t === 'settled' || t === 'rejected'
 
         if (!passFilter) return false
 
