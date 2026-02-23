@@ -11,3 +11,6 @@ cohere
 qdrant-client
 neo4j
 jina
+reportlab
+
+
