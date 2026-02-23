@@ -743,7 +743,7 @@ def _build_decision_payload(
     routing: dict,
     context: dict,
 ) -> dict:
-    eligible = status == "APPROVE"
+    eligible = status in ("APPROVE", "REVIEW")
     policy_violation_count = len(failed_ids)
     doc_gaps_count = context.get("doc_gaps_count", 0)
     hard_reject = status == "REJECT" and any(
