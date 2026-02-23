@@ -1,14 +1,18 @@
 """Lexora Backend — n8n Webhook Handler"""
 import json
 import asyncio
+import httpx
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, File, UploadFile, Form
 from database import get_supabase
 from models import N8NExtractionPayload
 from services.audit import log_audit_event
 from routes.claims import run_full_pipeline
+from config import get_settings
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
+
+settings = get_settings()
 
 
 async def trigger_pipeline(claim_id: str):
@@ -121,3 +125,71 @@ async def receive_extraction(payload: N8NExtractionPayload, background_tasks: Ba
         "claim_number": claim["claim_number"],
         "target_status": target_status,
     }
+
+
+@router.post("/n8n/claim-upload")
+async def proxy_to_n8n(
+    file: UploadFile = File(...),
+    policy_id: str = Form(None),
+    policy_number: str = Form(None)
+):
+    """
+    Proxy endpoint that forwards file uploads from the frontend to the n8n webhook.
+    
+    This endpoint:
+    1. Receives files from the customer dashboard
+    2. Forwards them to the n8n workflow
+    3. Returns the response back to the frontend
+    """
+    try:
+        # Read the file content
+        file_content = await file.read()
+        
+        # Prepare the file for forwarding
+        files = {
+            'data': (file.filename, file_content, file.content_type)
+        }
+        
+        # Prepare form data
+        data = {}
+        if policy_id:
+            data['policy_id'] = policy_id
+        if policy_number:
+            data['policy_number'] = policy_number
+        
+        # Forward to n8n webhook - use production endpoint
+        n8n_url = f"{settings.n8n_webhook_url}/webhook/claim-upload"
+        
+        # Increase timeout to 5 minutes for AI processing
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.post(
+                n8n_url,
+                files=files,
+                data=data
+            )
+            
+            # Check if the request was successful
+            response.raise_for_status()
+            
+        return {
+            "status": "success",
+            "message": "File uploaded to n8n successfully",
+            "filename": file.filename,
+            "n8n_response": response.text if response.text else "OK"
+        }
+        
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="n8n workflow timed out - it may still be processing in the background"
+        )
+    except httpx.HTTPError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to forward file to n8n: {str(e)}. Make sure n8n is running at {settings.n8n_webhook_url}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error: {str(e)}"
+        )

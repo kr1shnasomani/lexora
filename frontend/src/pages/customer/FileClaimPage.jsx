@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { SkeletonList } from '../../components/shared/Skeleton'
 import ErrorToast from '../../components/shared/ErrorToast'
 
-const N8N_WEBHOOK = 'http://10.149.50.194:5678/webhook/91f54ee7-85ce-4d26-a995-c07b50a8f907'
+const N8N_WEBHOOK = '/n8n/webhook/claim-upload'
 
 /* ─── Evidence items per policy type (static UI config) ───────────────── */
 const EVIDENCE_ITEMS = {
@@ -181,15 +181,16 @@ export default function FileClaimPage() {
         setSubmitting(true)
         setSubmitError(null)
         try {
-            await Promise.all(files.map(async (f) => {
-                const formData = new FormData()
-                formData.append('file', f)
-                formData.append('policy_id', selectedPolicy?.id || '')
-                formData.append('policy_number', selectedPolicy?.policy_number || '')
+            // Send all files in a single request
+            const formData = new FormData()
+            files.forEach((f) => {
+                formData.append('file', f)  // All files under same field name
+            })
+            formData.append('policy_id', selectedPolicy?.id || '')
+            formData.append('policy_number', selectedPolicy?.policy_number || '')
 
-                const res = await fetch(N8N_WEBHOOK, { method: 'POST', body: formData })
-                if (!res.ok) throw new Error(`n8n responded with ${res.status}: ${res.statusText}`)
-            }))
+            const res = await fetch(N8N_WEBHOOK, { method: 'POST', body: formData })
+            if (!res.ok) throw new Error(`n8n responded with ${res.status}: ${res.statusText}`)
 
             setSubmitted(true)
         } catch (err) {
