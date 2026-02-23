@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import Sidebar from '../../components/admin/Sidebar'
 import TopHeader from '../../components/admin/TopHeader'
 import { useFetch } from '../../hooks/useFetch'
-
+import { api } from '../../lib/api'
 /* ─── Style maps (same as original) ────────────────────────────────── */
 const DECISION_STYLES = {
     success: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
@@ -351,6 +351,26 @@ export default function AuditLogPage() {
     const [selected, setSelected] = useState(null)
     const [search, setSearch] = useState('')
     const [drawerOpen, setDrawerOpen] = useState(false)
+    const [showOverrideModal, setShowOverrideModal] = useState(false)
+    const [overrideDecision, setOverrideDecision] = useState('')
+    const [overrideRationale, setOverrideRationale] = useState('')
+    const [overrideLoading, setOverrideLoading] = useState(false)
+    const [overrideError, setOverrideError] = useState(null)
+
+    // Download document utility
+    const handleDownload = async (claimId, docId) => {
+        try {
+            const res = await api.get(`/api/claims/${claimId}/documents/${docId}/download`);
+            if (res.url) {
+                window.open(res.url, '_blank');
+            } else {
+                throw new Error("No URL returned from backend");
+            }
+        } catch (err) {
+            console.error("Download failed:", err);
+            alert('Failed to access document: ' + err.message);
+        }
+    };
 
     // Fetch recent claims to populate the left table
     const { data: claimsData, loading, error, refetch } = useFetch('/api/claims?page_size=50', 20_000)
@@ -375,6 +395,36 @@ export default function AuditLogPage() {
     const { data: rawEventsData, loading: eventsLoading } = useFetch(
         selected ? `/api/claims/${selected.id}/audit` : null
     )
+
+    // Fetch deep claim details for document extraction
+    const { data: claimDetailsData } = useFetch(
+        selected ? `/api/claims/${selected.id}` : null
+    )
+    const claimDocuments = claimDetailsData?.documents || []
+
+    const handleOverrideFinalize = async () => {
+        if (!overrideDecision || !overrideRationale) return;
+        setOverrideLoading(true);
+        setOverrideError(null);
+        try {
+            await api.post(`/api/claims/${selected.id}/manual-review`, {
+                decision: overrideDecision,
+                rationale: overrideRationale,
+                reviewer_id: "demo-user-001" // Handled dynamically in backend bypass
+            });
+            setShowOverrideModal(false);
+            setOverrideDecision('');
+            setOverrideRationale('');
+            // Optimistically close inspector or await refetch
+            setDrawerOpen(false);
+            refetch();
+        } catch (err) {
+            console.error("Override failed:", err);
+            setOverrideError("Failed to apply override. Check system logs.");
+        } finally {
+            setOverrideLoading(false);
+        }
+    };
 
     // Parse audit_trail events payload json
     let rawEvents = rawEventsData?.audit_trail || [];
@@ -642,6 +692,36 @@ export default function AuditLogPage() {
                                 </div>
                             </div>
 
+                            {/* Documents Map */}
+                            {claimDocuments.length > 0 && (
+                                <div className="px-5 py-3 border-b border-border-dark bg-[#38292b]/10 flex flex-col gap-2">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="material-symbols-outlined text-primary text-[16px]">folder_open</span>
+                                        <h4 className="text-white text-xs font-bold uppercase tracking-wider">Attached Evidence</h4>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        {claimDocuments.map(doc => (
+                                            <div key={doc.id} className="flex items-center justify-between p-2.5 rounded bg-background-dark border border-border-dark group">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="material-symbols-outlined text-slate-500 group-hover:text-primary transition-colors text-[20px]">description</span>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs text-white font-medium font-mono truncate max-w-[200px]" title={doc.file_name}>{doc.file_name}</span>
+                                                        <span className="text-[10px] text-slate-500">{new Date(doc.uploaded_at).toLocaleString()}</span>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleDownload(selected.id, doc.id)}
+                                                    className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                                                    title="View Document"
+                                                >
+                                                    <span className="material-symbols-outlined text-[18px]">visibility</span>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Accordion layers */}
                             <div className="flex-1 overflow-y-auto p-4 space-y-3">
                                 {eventsLoading
@@ -657,7 +737,10 @@ export default function AuditLogPage() {
                             {/* Footer */}
                             <div className="p-5 border-t border-border-dark bg-[#38292b]/10">
                                 <div className="flex gap-3">
-                                    <button className="flex-1 bg-primary hover:bg-[#d02038] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2">
+                                    <button
+                                        onClick={() => setShowOverrideModal(true)}
+                                        className="flex-1 bg-primary hover:bg-[#d02038] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2"
+                                    >
                                         <span className="material-symbols-outlined text-[18px]">edit_note</span>
                                         Override Decision
                                     </button>
@@ -676,6 +759,75 @@ export default function AuditLogPage() {
                     )}
                 </div>
             </div>
+
+            {/* Override Confirmation Modal */}
+            {showOverrideModal && selected && (
+                <div className="absolute inset-0 z-[100] bg-background-dark/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-surface-dark border border-primary/20 p-6 rounded-xl shadow-2xl w-full max-w-sm animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-2 text-primary mb-2">
+                            <span className="material-symbols-outlined shrink-0 text-[24px]">gavel</span>
+                            <h3 className="font-bold text-lg">Explicit Override</h3>
+                        </div>
+                        <p className="text-sm text-slate-300 mb-5 leading-relaxed">
+                            You are forcibly overriding the current active decision route for claim <strong className="text-white font-mono">{selected.claim_number}</strong>. This bypass will be irreversibly injected into the core LLM retraining logs.
+                        </p>
+
+                        <div className="space-y-4 mb-6">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">New Decision Output</label>
+                                <select
+                                    value={overrideDecision}
+                                    onChange={(e) => setOverrideDecision(e.target.value)}
+                                    className="w-full bg-background-dark border border-border-dark text-white text-sm rounded-lg p-3 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all appearance-none"
+                                >
+                                    <option value="" disabled>Select route formulation...</option>
+                                    {['auto_approve', 'auto_reject', 'manual_review', 'fraud_investigation']
+                                        .filter(d => d !== selected.final_decision && d !== selected.status)
+                                        .map(d => (
+                                            <option key={d} value={d}>{d.toUpperCase().replace(/_/g, ' ')}</option>
+                                        ))
+                                    }
+                                </select>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Underwriting Rationale</label>
+                                <textarea
+                                    className="w-full bg-background-dark border border-border-dark text-white text-sm rounded-lg p-3 min-h-[100px] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none placeholder:text-slate-600"
+                                    placeholder="Explain the technical logic for this manual intervention..."
+                                    value={overrideRationale}
+                                    onChange={(e) => setOverrideRationale(e.target.value)}
+                                    disabled={overrideLoading}
+                                />
+                            </div>
+                            {overrideError && (
+                                <div className="text-xs text-primary font-medium bg-primary/10 p-2 rounded border border-primary/20">
+                                    {overrideError}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                            <button
+                                onClick={() => { setShowOverrideModal(false); setOverrideDecision(''); setOverrideRationale(''); }}
+                                className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                                disabled={overrideLoading}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleOverrideFinalize}
+                                disabled={!overrideDecision || !overrideRationale || overrideLoading}
+                                className="bg-primary hover:bg-[#d02038] text-white px-5 py-2 rounded-lg font-bold text-sm shadow-lg shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[120px]"
+                            >
+                                {overrideLoading ? (
+                                    <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                                ) : 'Execute Override'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

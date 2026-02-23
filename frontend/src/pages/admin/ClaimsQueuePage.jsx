@@ -3,6 +3,7 @@ import Sidebar from '../../components/admin/Sidebar'
 import TopHeader from '../../components/admin/TopHeader'
 import { useFetch } from '../../hooks/useFetch'
 import { api } from '../../lib/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 /* ─── Helpers ───────────────────────────────────────────── */
 function getRiskBand(score) {
@@ -24,10 +25,8 @@ function getStatusStyle(status, finalDecision) {
         return { statusClass: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20', dotClass: 'bg-emerald-500', label: 'Approved' }
     if (['denied', 'auto_reject'].includes(combined))
         return { statusClass: 'bg-primary/10 text-primary border-primary/20', dotClass: 'bg-primary', label: 'Rejected' }
-    if (['fraud_investigation', 'under_review'].includes(combined))
-        return { statusClass: 'bg-purple-500/10 text-purple-500 border-purple-500/20', dotClass: 'bg-purple-500', label: 'Escalated' }
-    if (['manual_review'].includes(combined))
-        return { statusClass: 'bg-amber-500/10 text-amber-500 border-amber-500/20', dotClass: 'bg-amber-500', label: 'Review' }
+    if (['fraud_investigation', 'under_review', 'manual_review'].includes(combined))
+        return { statusClass: 'bg-amber-500/10 text-amber-500 border-amber-500/20', dotClass: 'bg-amber-500', label: 'Action Required' }
     return { statusClass: 'bg-slate-500/10 text-slate-400 border-slate-500/20', dotClass: 'bg-slate-400', label: status }
 }
 
@@ -51,123 +50,370 @@ function RingScore({ score, color }) {
     )
 }
 
-const FILTER_TABS = ['All Claims', 'High Risk', 'Medium Risk', 'Low Risk']
+const FILTER_TABS = ['All Active', 'High Risk', 'Medium Risk', 'Low Risk']
 const FILTER_ICONS = ['view_list', 'warning', 'error', 'check_circle']
 const FILTER_BANDS = [null, 'High', 'Medium', 'Low']
 
-/* ─── Fallback data shown when backend is unreachable ─────────────── */
-const FALLBACK_CLAIMS = [
-    {
-        id: 'fb-1', claim_number: 'CLM-9803', holder_name: 'Sarah Jenkins', type: 'Auto (Collision)',
-        amount: '$12,450.00', risk_score: 0.92, status: 'under_review', final_decision: null,
-        date: 'Feb 20, 2025', policy_number: '#9921-A-Secure', member_since: 'Aug 2019',
-        previous_claims: '2 (Low Value)', assigned_to: 'Senior Adjudicator',
-        flags: [
-            { icon: 'location_off', color: 'text-primary', title: 'Location Anomaly', critical: true, desc: 'Claim incident reported in Chicago, IL but metadata from uploaded images contains GPS coordinates from Miami, FL (1,300 miles discrepancy).' },
-            { icon: 'data_object', color: 'text-amber-400', title: 'Mismatched Metadata', critical: true, desc: 'EXIF data creation date predates the policy active period by 4 days.' },
-            { icon: 'trending_up', color: 'text-primary', title: 'Frequency Spike', critical: false, desc: 'Unusual claim submission velocity within family plan group.' },
-        ],
-    },
-    {
-        id: 'fb-2', claim_number: 'CLM-9741', holder_name: 'Marcus Thompson', type: 'Medical',
-        amount: '$450.00', risk_score: 0.14, status: 'approved', final_decision: 'auto_approve',
-        date: 'Feb 18, 2025', policy_number: '#5532-M-Prime', member_since: 'Mar 2022',
-        previous_claims: '0', assigned_to: null, flags: [],
-    },
-    {
-        id: 'fb-3', claim_number: 'CLM-9688', holder_name: 'David Chen', type: 'Property',
-        amount: '$8,200.00', risk_score: 0.78, status: 'fraud_investigation', final_decision: 'fraud_investigation',
-        date: 'Feb 17, 2025', policy_number: '#7743-P-Gold', member_since: 'Jan 2020',
-        previous_claims: '3 (Mixed)', assigned_to: 'Fraud Investigation Unit',
-        flags: [
-            { icon: 'receipt_long', color: 'text-amber-400', title: 'Duplicate Receipts', critical: true, desc: 'Two submitted receipts share identical serial numbers from different vendors.' },
-        ],
-    },
-    {
-        id: 'fb-4', claim_number: 'CLM-9612', holder_name: 'Emily Ross', type: 'Property',
-        amount: '$15,000.00', risk_score: 0.88, status: 'fraud_investigation', final_decision: 'fraud_investigation',
-        date: 'Feb 15, 2025', policy_number: '#3301-P-Elite', member_since: 'Jun 2018',
-        previous_claims: '5 (High Value)', assigned_to: 'Senior Adjudicator',
-        flags: [
-            { icon: 'person_alert', color: 'text-primary', title: 'Identity Mismatch', critical: true, desc: 'Claimant name does not match policy holder record in linked government database.' },
-            { icon: 'network_node', color: 'text-amber-400', title: 'Network Cluster', critical: true, desc: 'Claimant shares address history with 3 other flagged claimants from CLM-9431.' },
-        ],
-    },
-    {
-        id: 'fb-5', claim_number: 'CLM-9598', holder_name: 'Marcus Johnson', type: 'Auto',
-        amount: '$2,100.00', risk_score: 0.05, status: 'approved', final_decision: 'approved',
-        date: 'Feb 14, 2025', policy_number: '#8821-A-Basic', member_since: 'Nov 2021',
-        previous_claims: '1 (Low Value)', assigned_to: null, flags: [],
-    },
-    {
-        id: 'fb-6', claim_number: 'CLM-9541', holder_name: 'Anita Patel', type: 'Medical',
-        amount: '$780.00', risk_score: 0.88, status: 'denied', final_decision: 'auto_reject',
-        date: 'Feb 12, 2025', policy_number: '#2290-M-Silver', member_since: 'Feb 2020',
-        previous_claims: '4 (Denied ×2)', assigned_to: 'Auto-Rejection Engine',
-        flags: [
-            { icon: 'calendar_month', color: 'text-primary', title: 'Expired Coverage', critical: true, desc: 'Treatment date falls 12 days outside active coverage period. Policy lapsed on Jan 31, 2025.' },
-        ],
-    },
-    {
-        id: 'fb-7', claim_number: 'CLM-9490', holder_name: 'James Horowitz', type: 'Property',
-        amount: '$14,800.00', risk_score: 0.95, status: 'fraud_investigation', final_decision: 'fraud_investigation',
-        date: 'Feb 09, 2025', policy_number: '#1177-P-Supreme', member_since: 'Apr 2017',
-        previous_claims: '6 (Escalated ×3)', assigned_to: 'Senior Adjudicator',
-        flags: [
-            { icon: 'groups', color: 'text-primary', title: 'Syndicate Pattern', critical: true, desc: 'Claim matches known organized fraud ring pattern #992. Linked to 4 other open investigations.' },
-            { icon: 'location_off', color: 'text-amber-400', title: 'Location Anomaly', critical: true, desc: 'Reported incident location has no matching emergency services record.' },
-        ],
-    },
-]
+/* ─── Fetch & Download Helpers ───────────────────────────── */
+async function downloadDocument(claimId, docId) {
+    try {
+        const res = await api.get(`/api/claims/${claimId}/documents/${docId}/download`);
+        if (res.url) {
+            window.open(res.url, '_blank');
+        } else {
+            throw new Error("No URL returned from backend");
+        }
+    } catch (err) {
+        console.error("Download failed:", err);
+        alert('Failed to access document: ' + err.message);
+    }
+}
 
+/* ─── Detail Modal Component ─────────────────────────────── */
+function ClaimDetailModal({ claimId, onClose, onRefresh }) {
+    const { user } = useAuth()
+    const { data: detailData, loading: detailLoading, error: detailError } = useFetch(`/api/claims/${claimId}`)
 
+    const [confirmAction, setConfirmAction] = useState(null) // 'approve' | 'reject' | null
+    const [actionLoading, setActionLoading] = useState(false)
+    const [rationale, setRationale] = useState('')
+    const [actionError, setActionError] = useState(null)
+
+    const handleFinalize = async () => {
+        if (!confirmAction) return;
+        setActionLoading(true);
+        setActionError(null);
+        try {
+            await api.post(`/api/claims/${claimId}/manual-review`, {
+                reviewer_id: user?.id || 'system',
+                decision: confirmAction === 'approve' ? 'auto_approve' : 'auto_reject',
+                rationale: rationale || `Manually ${confirmAction === 'approve' ? 'approved' : 'rejected'} via UI`,
+                feedback_category: 'manual_override',
+                feedback_notes: rationale,
+            })
+            onRefresh()
+        } catch (err) {
+            setActionError(err.message)
+            setActionLoading(false)
+        }
+    }
+
+    if (detailLoading && !detailData) return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-primary"></div>
+        </div>
+    )
+
+    if (detailError) return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6">
+            <div className="bg-surface-dark border border-border-dark p-6 rounded-xl text-center max-w-lg">
+                <span className="material-symbols-outlined text-4xl text-primary mb-4">error</span>
+                <h2 className="text-xl text-white font-bold mb-2">Error Loading Details</h2>
+                <p className="text-slate-400 text-sm mb-6">{detailError}</p>
+                <button onClick={onClose} className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20">Close</button>
+            </div>
+        </div>
+    )
+
+    const claim = detailData?.claim || {}
+    const auditTrail = detailData?.audit_trail || []
+    const documents = detailData?.documents || []
+
+    const score = claim.fraud_score ?? 0
+    const ring = getRingColor(score)
+    const s = getStatusStyle(claim.status, claim.final_decision)
+    const confidence = Math.round(score * 100) / 10
+
+    // Extract flags
+    const flags = []
+    let rawFraud = null
+    try { rawFraud = typeof claim.fraud_analysis === 'string' ? JSON.parse(claim.fraud_analysis) : claim.fraud_analysis } catch (e) { }
+
+    if (rawFraud?.reasons && Array.isArray(rawFraud.reasons)) {
+        rawFraud.reasons.forEach(r => flags.push({ icon: 'warning', color: 'text-primary', title: 'AI Flag', text: r, critical: true }))
+    }
+
+    let rawWarn = null
+    try { rawWarn = typeof claim.extraction_warnings === 'string' ? JSON.parse(claim.extraction_warnings) : claim.extraction_warnings } catch (e) { }
+
+    if (rawWarn && Array.isArray(rawWarn)) {
+        rawWarn.forEach(w => flags.push({ icon: 'data_object', color: 'text-amber-400', title: 'Data Warning', text: w, critical: false }))
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background-dark/90 backdrop-blur-md p-4 md:p-8 animate-in fade-in duration-200">
+            <div className="bg-surface-dark border border-border-dark shadow-[0_20px_60px_rgba(0,0,0,0.8)] rounded-2xl w-full max-w-6xl max-h-full flex flex-col overflow-hidden relative">
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-border-dark bg-black/20 shrink-0">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center text-primary border border-primary/30 shadow-[0_0_15px_rgba(232,48,73,0.2)]">
+                            <span className="material-symbols-outlined text-[24px]">assignment_ind</span>
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-2xl font-bold text-white font-mono tracking-tight">#{claim.claim_number || claimId.substring(0, 8)}</h2>
+                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest rounded border ${s.statusClass}`}>
+                                    {s.label}
+                                </span>
+                            </div>
+                            <p className="text-slate-400 text-sm mt-0.5">Comprehensive Claim Context</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/10 shrink-0 border border-transparent hover:border-white/10">
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+
+                {/* Body (Scrollable Split) */}
+                <div className="flex-1 overflow-y-auto min-h-0 bg-background-dark/50">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
+
+                        {/* LEFT COL: Core Details */}
+                        <div className="lg:col-span-2 space-y-6">
+
+                            {/* Profile / High Level */}
+                            <div className="bg-surface-dark border border-border-dark rounded-xl p-5 shadow-lg">
+                                <h3 className="text-white font-bold border-b border-border-dark pb-3 mb-4 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary text-[18px]">person</span>
+                                    Claimant Profile
+                                </h3>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                    <div>
+                                        <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Full Name</p>
+                                        <p className="text-white font-medium">{claim.claimant_name || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Phone</p>
+                                        <p className="text-slate-300 font-mono text-sm">{claim.claimant_phone || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Incident Date</p>
+                                        <p className="text-white font-medium">{claim.incident_date || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Claimed Amount</p>
+                                        <p className="text-emerald-400 font-mono font-bold text-lg leading-none">
+                                            {claim.claimed_amount ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(claim.claimed_amount) : '$0.00'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="mt-5 pt-5 border-t border-border-dark">
+                                    <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-2">Incident Description</p>
+                                    <p className="text-slate-300 text-sm leading-relaxed bg-black/20 p-4 rounded-lg border border-white/5 shadow-inner">
+                                        {claim.incident_description || 'No description provided.'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Documents Attached */}
+                            <div className="bg-surface-dark border border-border-dark rounded-xl p-5 shadow-lg">
+                                <h3 className="text-white font-bold border-b border-border-dark pb-3 mb-4 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary text-[18px]">folder_open</span>
+                                    Attached Evidence ({documents.length})
+                                </h3>
+                                {documents.length === 0 ? (
+                                    <p className="text-slate-500 text-sm italic">No documents attached to this claim.</p>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {documents.map((doc) => (
+                                            <div key={doc.id} className="flex items-center gap-3 p-3 rounded-xl border border-white/5 bg-black/20 hover:bg-white/5 hover:border-white/10 transition-all group shadow-sm">
+                                                <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center shrink-0 border border-white/5">
+                                                    <span className="material-symbols-outlined text-slate-400">description</span>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-white text-sm font-medium truncate">{doc.file_name}</p>
+                                                    <p className="text-slate-500 text-xs mt-0.5 font-mono">{(doc.file_size / 1024).toFixed(1)} KB • {doc.content_type?.split('/')[1] || 'File'}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => downloadDocument(claim.id, doc.id)}
+                                                    className="p-2.5 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors shrink-0 shadow-sm"
+                                                    title="Download/View"
+                                                >
+                                                    <span className="material-symbols-outlined text-[18px]">download</span>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                        </div>
+
+                        {/* RIGHT COL: Analysis & Audit */}
+                        <div className="space-y-6">
+
+                            {/* AI Risk Analysis */}
+                            <div className="bg-gradient-to-br from-primary/5 to-surface-dark border border-primary/30 rounded-xl p-5 relative overflow-hidden shadow-[0_0_30px_rgba(232,48,73,0.05)]">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-[40px] rounded-full pointer-events-none" />
+
+                                <h3 className="text-white font-bold border-b border-primary/20 pb-3 mb-4 flex items-center justify-between relative z-10">
+                                    <span className="flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-primary text-[18px]">smart_toy</span>
+                                        AI Risk Analysis
+                                    </span>
+                                    <span className="text-sm font-mono text-primary font-bold">{confidence.toFixed(1)}%</span>
+                                </h3>
+
+                                <div className="flex justify-center my-8 relative z-10">
+                                    <div className="scale-150 transform origin-center drop-shadow-xl">
+                                        <RingScore score={Math.round(score * 100)} color={ring} />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 relative z-10 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                    {flags.length === 0 ? (
+                                        <p className="text-slate-400 text-sm text-center">No anomalies detected natively.</p>
+                                    ) : (
+                                        flags.map((f, i) => (
+                                            <div key={i} className={`flex items-start gap-3 text-sm p-3 rounded-lg border shadow-inner ${f.critical ? 'bg-primary/10 border-primary/30 text-primary-light' : 'bg-amber-500/10 border-amber-500/30 text-amber-200'}`}>
+                                                <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">{f.icon}</span>
+                                                <span className="leading-relaxed font-medium">{f.text}</span>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Audit Trail Timeline */}
+                            <div className="bg-surface-dark border border-border-dark rounded-xl p-5 shadow-lg">
+                                <h3 className="text-white font-bold border-b border-border-dark pb-3 mb-5 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary text-[18px]">history</span>
+                                    System Audit Trail
+                                </h3>
+                                <div className="space-y-0 relative before:absolute before:inset-0 before:ml-2.5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border-dark before:to-transparent">
+                                    {auditTrail.map((log, i) => (
+                                        <div key={log.id || i} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active mb-4 last:mb-0">
+                                            {/* Icon */}
+                                            <div className="flex items-center justify-center w-6 h-6 rounded-full border-2 border-background-dark bg-primary text-slate-500 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10" />
+                                            {/* Card */}
+                                            <div className="w-[calc(100%-2.5rem)] md:w-[calc(50%-1.5rem)] bg-black/30 p-3 rounded border border-white/5 shadow-sm">
+                                                <div className="flex items-center justify-between space-x-2 mb-1">
+                                                    <div className="font-bold text-white text-xs capitalize">{log.action?.replace('_', ' ')}</div>
+                                                    <div className="font-mono text-slate-500 text-[9px]">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                                </div>
+                                                <div className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">{log.status}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {auditTrail.length === 0 && (
+                                        <p className="text-slate-500 text-sm italic text-center py-4">No audit events recorded.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="p-5 border-t border-border-dark bg-surface-dark flex justify-end gap-3 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-20">
+                    <button onClick={onClose} className="px-6 py-2.5 rounded-lg text-slate-300 font-medium hover:bg-white/5 transition-colors border border-transparent hover:border-white/10">
+                        Cancel Review
+                    </button>
+                    <button
+                        onClick={() => setConfirmAction('reject')}
+                        className="px-8 py-2.5 rounded-lg bg-primary text-white font-bold hover:bg-primary-dark transition-colors shadow-[0_0_15px_rgba(232,48,73,0.3)] flex items-center gap-2"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">close</span>
+                        Reject Claim
+                    </button>
+                    <button
+                        onClick={() => setConfirmAction('approve')}
+                        className="px-8 py-2.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors shadow-[0_0_15px_rgba(5,150,105,0.3)] flex items-center gap-2"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">check</span>
+                        Approve Claim
+                    </button>
+                </div>
+
+                {/* Confirm Overlay Modal */}
+                {confirmAction && (
+                    <div className="absolute inset-0 z-50 bg-background-dark/80 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="bg-surface-dark border border-border-dark shadow-2xl rounded-2xl w-full max-w-lg p-8 animate-in zoom-in-95 duration-200">
+                            <h3 className={`text-2xl font-bold mb-3 flex items-center gap-2 ${confirmAction === 'approve' ? 'text-emerald-400' : 'text-primary'}`}>
+                                <span className="material-symbols-outlined text-[28px]">
+                                    {confirmAction === 'approve' ? 'verified_user' : 'gavel'}
+                                </span>
+                                Confirm {confirmAction === 'approve' ? 'Approval' : 'Rejection'}
+                            </h3>
+                            <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                                You are artificially bypassing the AI layer to <strong className="text-white">{confirmAction}</strong> claim <span className="font-mono text-white">#{claim.claim_number}</span>. Please provide an internal rationale for this override, which will be injected into our model retraining feedback loops.
+                            </p>
+
+                            <div className="mb-6 relative">
+                                <label className="block text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Internal Rationale</label>
+                                <textarea
+                                    value={rationale}
+                                    onChange={e => setRationale(e.target.value)}
+                                    placeholder="E.g., Investigated documents manually, found valid receipts matching policy limits despite AI warnings..."
+                                    className="w-full bg-black/40 border border-border-dark rounded-xl p-4 text-white text-sm focus:outline-none focus:border-primary transition-colors resize-none h-32 shadow-inner"
+                                />
+                            </div>
+
+                            {actionError && (
+                                <div className="mb-6 p-4 bg-primary/10 border border-primary/30 rounded-xl text-primary text-sm flex items-center gap-2">
+                                    <span className="material-symbols-outlined shrink-0 text-[18px]">error</span>
+                                    {actionError}
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-border-dark">
+                                <button
+                                    disabled={actionLoading}
+                                    onClick={() => setConfirmAction(null)}
+                                    className="px-6 py-2.5 rounded-lg text-slate-300 font-medium hover:bg-white/5 transition-colors disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    disabled={actionLoading || !rationale.trim()}
+                                    onClick={handleFinalize}
+                                    className={`px-8 py-2.5 rounded-lg text-white font-bold transition-all shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${confirmAction === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' : 'bg-primary hover:bg-primary-dark shadow-primary/20'}`}
+                                >
+                                    {actionLoading ? (
+                                        <>
+                                            <span className="animate-spin w-4 h-4 border-2 border-white/20 border-t-white rounded-full" />
+                                            Saving...
+                                        </>
+                                    ) : `Finalize ${confirmAction}`}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
 
 /* ─── Page ───────────────────────────────────────────────── */
 export default function ClaimsQueuePage() {
-    const [selected, setSelected] = useState(null)
+    const [selectedId, setSelectedId] = useState(null)
     const [activeTab, setActiveTab] = useState(0)
-    const [actionLoading, setActionLoading] = useState(false)
-    const [actionError, setActionError] = useState(null)
 
     // Live fetch — refresh every 15s
-    const { data, loading, error, refetch } = useFetch('/api/claims?page_size=50', 15_000)
+    const { data, loading, error, refetch } = useFetch('/api/claims?page_size=100', 15_000)
 
     // Transform backend data to match the UI shape
-    const liveClaims = (data?.items || []).map(c => {
-        const aiFlags = []
-        if (c.fraud_analysis?.reasons && Array.isArray(c.fraud_analysis.reasons)) {
-            c.fraud_analysis.reasons.forEach(r => {
-                aiFlags.push({ icon: 'warning', color: 'text-primary', title: 'AI Flag', critical: true, desc: r })
-            })
-        }
-        if (c.extraction_warnings && Array.isArray(c.extraction_warnings)) {
-            c.extraction_warnings.forEach(w => {
-                aiFlags.push({ icon: 'data_object', color: 'text-amber-400', title: 'Data Warning', critical: false, desc: w })
-            })
-        }
+    const liveClaims = (data?.items || [])
+        // IMPORTANT: Filter natively isolated to ONLY show claims requiring manual oversight
+        .filter(c => ['under_review', 'manual_review', 'fraud_investigation'].includes(c.status))
+        .map(c => {
+            return {
+                ...c,
+                id: c.id,
+                claim_number: c.claim_number,
+                holder_name: c.claimant_name || 'Unspecified',
+                type: c.incident_type || 'Unknown',
+                amount: c.claimed_amount ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(c.claimed_amount) : '$0.00',
+                risk_score: c.fraud_score != null ? c.fraud_score : 0,
+                status: c.status,
+                final_decision: c.final_decision,
+                date: c.created_at ? new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(new Date(c.created_at)) : '—',
+            }
+        })
 
-        return {
-            ...c,
-            id: c.id,
-            claim_number: c.claim_number,
-            holder_name: c.claimant_name || 'Unspecified',
-            type: c.incident_type || 'Unknown',
-            amount: c.claimed_amount ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(c.claimed_amount) : '$0.00',
-            risk_score: c.fraud_score != null ? c.fraud_score : 0,
-            status: c.status,
-            final_decision: c.final_decision,
-            date: c.created_at ? new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(new Date(c.created_at)) : '—',
-            policy_number: c.policies?.policy_number || '—',
-            member_since: c.policies?.policy_start_date ? new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }).format(new Date(c.policies.policy_start_date)) : '—',
-            previous_claims: '0',
-            assigned_to: c.users?.full_name || null,
-            flags: aiFlags
-        }
-    })
-
-    // Use fallback data when backend is unreachable and we have no live data
-    const isFallback = !!error && liveClaims.length === 0
-    const claims = isFallback ? FALLBACK_CLAIMS : liveClaims
+    const claims = liveClaims
 
     // Filter by risk band
     const riskBand = FILTER_BANDS[activeTab]
@@ -182,52 +428,21 @@ export default function ClaimsQueuePage() {
         'Low Risk': claims.filter(c => getRiskBand(c.risk_score ?? 0) === 'Low').length,
     }
 
-    const handleAction = useCallback(async (claimId, action) => {
-        setActionLoading(true)
-        setActionError(null)
-        try {
-            await api.post(`/api/claims/${claimId}/actions`, { action })
-            await refetch()
-            setSelected(null)
-        } catch (err) {
-            setActionError(err.message)
-        } finally {
-            setActionLoading(false)
-        }
-    }, [refetch])
-
-    // Shape the selected claim into drawer-friendly format
-    const drawerClaim = selected ? (() => {
-        const s = getStatusStyle(selected.status, selected.final_decision)
-        const score = selected.risk_score ?? 0
-        return {
-            ...selected,
-            riskNum: Math.round(score * 100) / 100,
-            ringColor: getRingColor(score),
-            statusLabel: s.label,
-            statusClass: s.statusClass,
-            dotClass: s.dotClass,
-            confidence: Math.round(score * 100) / 10,
-        }
-    })() : null
-
     return (
         <div className="flex h-screen bg-background-dark overflow-hidden">
             <Sidebar />
-            <div className="flex flex-col flex-1 overflow-hidden">
-                <TopHeader title="Claims Queue" />
+            <div className="flex flex-col flex-1 overflow-hidden relative">
+                <TopHeader title="Manual Review" />
 
                 <div className="flex flex-1 overflow-hidden relative">
-
-                    {/* ── LEFT: Table panel ─────────────────────── */}
                     <div className="flex-1 flex flex-col overflow-hidden">
                         <div className="p-6 pb-3 space-y-4">
                             {/* Header */}
                             <div className="flex flex-wrap justify-between items-end gap-4">
                                 <div>
-                                    <h1 className="text-white text-2xl font-bold tracking-tight">Claims Process Queue</h1>
+                                    <h1 className="text-white text-2xl font-bold tracking-tight">Manual Review Queue</h1>
                                     <p className="text-slate-400 text-sm mt-0.5">
-                                        Real-time adjudication and fraud detection stream.{' '}
+                                        Claims awaiting human underwriter adjudication due to AI escalation.{' '}
                                         {tabCounts['High Risk'] > 0 && (
                                             <span className="text-primary font-medium">{tabCounts['High Risk']} High Risk</span>
                                         )}
@@ -235,13 +450,9 @@ export default function ClaimsQueuePage() {
                                     </p>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button className="flex items-center gap-2 px-3 py-2 bg-surface-dark border border-border-dark rounded-lg text-white hover:bg-border-dark transition-colors text-sm">
+                                    <button className="flex items-center gap-2 px-3 py-2 bg-surface-dark border border-border-dark rounded-lg text-white hover:bg-border-dark transition-colors text-sm shadow-sm">
                                         <span className="material-symbols-outlined text-[18px]">filter_list</span>
                                         Filters
-                                    </button>
-                                    <button className="flex items-center gap-2 px-3 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors text-sm font-medium shadow-[0_0_15px_rgba(232,48,73,0.3)]">
-                                        <span className="material-symbols-outlined text-[18px]">download</span>
-                                        Export Data
                                     </button>
                                 </div>
                             </div>
@@ -254,7 +465,7 @@ export default function ClaimsQueuePage() {
                                         <button
                                             key={tab}
                                             onClick={() => setActiveTab(i)}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors border ${activeTab === i
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors border shadow-sm ${activeTab === i
                                                 ? 'bg-primary/20 border-primary/50 text-primary font-medium'
                                                 : 'bg-surface-dark border-border-dark text-slate-300 hover:bg-border-dark'
                                                 }`}
@@ -269,26 +480,25 @@ export default function ClaimsQueuePage() {
 
                         {/* Error banner */}
                         {error && (
-                            <div className="mx-6 mb-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm text-primary flex items-center gap-2">
-                                <span className="material-symbols-outlined text-[18px]">wifi_off</span>
+                            <div className="mx-6 mb-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm text-primary flex items-center gap-3 shadow-inner">
+                                <span className="material-symbols-outlined text-[20px]">error</span>
                                 Backend unreachable: {error}
-                                {isFallback && <span className="ml-auto text-primary/70 text-xs">Showing cached reference data</span>}
                             </div>
                         )}
 
                         {/* Table */}
                         <div className="flex-1 overflow-y-auto px-6 pb-6">
-                            <div className="rounded-xl border border-border-dark bg-surface-dark overflow-hidden shadow-2xl shadow-black/50">
+                            <div className="rounded-xl border border-border-dark bg-surface-dark overflow-hidden shadow-xl">
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-border-dark/40 border-b border-border-dark text-slate-400 text-xs uppercase tracking-wider">
-                                            <th className="p-4 font-medium w-20">Risk</th>
-                                            <th className="p-4 font-medium">Claim ID</th>
-                                            <th className="p-4 font-medium">Claimant</th>
-                                            <th className="p-4 font-medium">Type</th>
-                                            <th className="p-4 font-medium text-right">Amount</th>
-                                            <th className="p-4 font-medium">Status</th>
-                                            <th className="p-4 font-medium text-right">Date</th>
+                                            <th className="p-4 font-bold w-20">Risk</th>
+                                            <th className="p-4 font-bold">Claim ID</th>
+                                            <th className="p-4 font-bold">Claimant</th>
+                                            <th className="p-4 font-bold">Type</th>
+                                            <th className="p-4 font-bold text-right">Amount</th>
+                                            <th className="p-4 font-bold">AI Status</th>
+                                            <th className="p-4 font-bold text-right">Date Escaped</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border-dark text-sm">
@@ -305,8 +515,11 @@ export default function ClaimsQueuePage() {
                                             : filtered.length === 0
                                                 ? (
                                                     <tr>
-                                                        <td colSpan={7} className="p-8 text-center text-slate-500 text-sm">
-                                                            No claims found for this filter.
+                                                        <td colSpan={7} className="p-12 text-center text-slate-500 text-sm">
+                                                            <div className="flex flex-col items-center justify-center gap-2">
+                                                                <span className="material-symbols-outlined text-4xl text-slate-600">check_circle</span>
+                                                                No claims found for this filter.
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 )
@@ -314,28 +527,22 @@ export default function ClaimsQueuePage() {
                                                     const score = c.risk_score ?? 0
                                                     const ring = getRingColor(score)
                                                     const s = getStatusStyle(c.status, c.final_decision)
-                                                    const isSelected = selected?.id === c.id
                                                     return (
                                                         <tr
                                                             key={c.id}
-                                                            onClick={() => setSelected(c)}
-                                                            className={`group transition-colors cursor-pointer border-l-4 ${isSelected
-                                                                ? 'bg-primary/10 border-l-primary hover:bg-primary/15'
-                                                                : 'border-l-transparent hover:bg-border-dark/30'
-                                                                }`}
+                                                            onClick={() => setSelectedId(c.id)}
+                                                            className="group transition-colors cursor-pointer border-l-4 border-l-transparent hover:bg-white/5 hover:border-l-primary"
                                                         >
                                                             <td className="p-4">
                                                                 <RingScore score={Math.round(score * 100)} color={ring} />
                                                             </td>
-                                                            <td className="p-4 font-mono text-white font-medium">
-                                                                #{c.claim_number}
-                                                            </td>
+                                                            <td className="p-4 font-mono text-white font-medium">#{c.claim_number}</td>
                                                             <td className="p-4">
                                                                 <div className="flex items-center gap-3">
-                                                                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs text-white font-bold">
+                                                                    <div className="w-8 h-8 rounded-lg bg-surface-dark border border-border-dark flex items-center justify-center text-xs text-slate-300 font-bold">
                                                                         {(c.holder_name || 'U').charAt(0)}
                                                                     </div>
-                                                                    <span className={`font-medium ${isSelected ? 'text-white' : 'text-slate-300'}`}>
+                                                                    <span className="font-medium text-slate-300 group-hover:text-white transition-colors">
                                                                         {c.holder_name}
                                                                     </span>
                                                                 </div>
@@ -358,186 +565,16 @@ export default function ClaimsQueuePage() {
                             </div>
                         </div>
                     </div>
-
-                    {/* ── RIGHT: Detail Drawer ───────────────────── */}
-                    {selected && drawerClaim && (
-                        <aside className="w-[400px] xl:w-[440px] shrink-0 border-l border-border-dark bg-surface-dark flex flex-col overflow-hidden relative shadow-[-10px_0_30px_rgba(0,0,0,0.4)]">
-                            {/* Drawer header */}
-                            <div className="flex items-center justify-between p-5 border-b border-border-dark bg-border-dark/20">
-                                <div>
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <h2 className="text-xl font-bold text-white font-mono">#{selected.claim_number}</h2>
-                                        <span className={`px-2 py-0.5 text-xs font-medium rounded border ${drawerClaim.statusClass}`}>
-                                            {drawerClaim.statusLabel}
-                                        </span>
-                                    </div>
-                                    <p className="text-slate-400 text-sm mt-1">
-                                        Assigned to <span className="text-white font-medium">{selected.assigned_to || 'Unassigned'}</span>
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={() => setSelected(null)}
-                                    className="text-slate-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"
-                                >
-                                    <span className="material-symbols-outlined">close</span>
-                                </button>
-                            </div>
-
-                            {/* Scrollable content */}
-                            <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-36">
-
-                                {/* Fraud score hero */}
-                                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/10 to-background-dark border border-primary/20 p-5">
-                                    <div className="absolute -top-8 -right-8 w-32 h-32 bg-primary/20 blur-[50px] rounded-full pointer-events-none" />
-                                    <div className="flex items-start justify-between relative z-10">
-                                        <div>
-                                            <h3 className="text-primary font-bold text-base flex items-center gap-2">
-                                                <span className="material-symbols-outlined text-[20px]">warning</span>
-                                                {drawerClaim.confidence > 50 ? 'High Risk Detected' : 'Risk Analysis'}
-                                            </h3>
-                                            <p className="text-slate-400 text-xs mt-1 max-w-[200px] leading-relaxed">
-                                                AI fraud confidence score based on multi-layer analysis.
-                                            </p>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-3xl font-bold text-white tracking-tighter drop-shadow-[0_0_10px_rgba(232,48,73,0.5)]">
-                                                {drawerClaim.confidence.toFixed(1)}%
-                                            </div>
-                                            <div className="text-primary text-[10px] font-medium uppercase tracking-widest mt-0.5">
-                                                Confidence Score
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="mt-4 h-2 w-full bg-black/40 rounded-full overflow-hidden flex">
-                                        <div className="h-full bg-emerald-500 opacity-30" style={{ width: '10%' }} />
-                                        <div className="h-full bg-amber-500 opacity-30" style={{ width: '20%' }} />
-                                        <div className="h-full bg-primary shadow-[0_0_8px_currentColor]" style={{ width: `${Math.min(drawerClaim.confidence, 70)}%` }} />
-                                    </div>
-                                    <div className="flex justify-between mt-1.5 text-[10px] text-slate-500 font-mono">
-                                        <span>Low Risk</span>
-                                        <span>High Probability</span>
-                                    </div>
-                                </div>
-
-                                {/* Claimant & Policy */}
-                                <div>
-                                    <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest border-b border-border-dark pb-2 mb-4">
-                                        Claimant & Policy
-                                    </h4>
-                                    <div className="flex items-center gap-4 mb-5">
-                                        <div className="w-12 h-12 rounded-lg bg-slate-700 overflow-hidden shrink-0 border border-border-dark flex items-center justify-center text-xl text-white font-bold font-mono">
-                                            {(selected.holder_name || 'U').charAt(0)}
-                                        </div>
-                                        <div>
-                                            <div className="text-slate-500 text-[10px] uppercase tracking-wide">Full Name</div>
-                                            <div className="text-white text-base font-bold">{selected.holder_name || '—'}</div>
-                                        </div>
-                                        <div className="ml-auto text-right">
-                                            <div className="text-slate-500 text-[10px] uppercase tracking-wide">Policy Number</div>
-                                            <div className="text-white text-sm font-mono">{selected.policy_number || '—'}</div>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                                        {[
-                                            { label: 'Member Since', value: selected.member_since || '—' },
-                                            { label: 'Previous Claims', value: selected.previous_claims || '—' },
-                                        ].map(({ label, value }) => (
-                                            <div key={label}>
-                                                <div className="text-slate-500 text-[10px] uppercase tracking-wide">{label}</div>
-                                                <div className="text-white text-sm font-medium mt-0.5">{value}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* AI Flags */}
-                                <div>
-                                    <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest border-b border-border-dark pb-2 mb-3">
-                                        AI Flag Analysis
-                                    </h4>
-                                    {(!selected.flags || selected.flags.length === 0) ? (
-                                        <p className="text-slate-500 text-sm py-2">No anomalies detected for this claim.</p>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            {selected.flags.map((f, i) => (
-                                                <div
-                                                    key={i}
-                                                    className={`flex gap-3 p-3 rounded-lg border ${f.critical
-                                                        ? 'bg-background-dark border-primary/20'
-                                                        : 'bg-background-dark border-white/10 opacity-70'
-                                                        }`}
-                                                >
-                                                    <span className={`material-symbols-outlined text-[20px] mt-0.5 shrink-0 ${f.color || 'text-primary'}`}>
-                                                        {f.icon || 'warning'}
-                                                    </span>
-                                                    <div>
-                                                        <p className="text-white text-sm font-medium">{f.title}</p>
-                                                        <p className="text-slate-400 text-xs mt-1 leading-relaxed">{f.description || f.desc}</p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Claim Details */}
-                                <div>
-                                    <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest border-b border-border-dark pb-2 mb-3">
-                                        Claim Details
-                                    </h4>
-                                    <div className="bg-background-dark rounded-lg p-4 border border-border-dark">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-white text-sm font-medium">Total Claimed</span>
-                                            <span className="text-xl text-white font-bold font-mono">{selected.amount}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Action error */}
-                                {actionError && (
-                                    <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">
-                                        Action failed: {actionError}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Sticky action footer */}
-                            <div className="absolute bottom-0 left-0 w-full bg-surface-dark border-t border-border-dark p-4 z-20 shadow-[0_-5px_20px_rgba(0,0,0,0.4)]">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        disabled={actionLoading}
-                                        onClick={() => handleAction(selected.id, 'escalate')}
-                                        className="col-span-1 py-2.5 px-4 rounded-lg border border-white/20 text-white font-medium hover:bg-white/5 transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-50"
-                                    >
-                                        Escalate
-                                        <span className="material-symbols-outlined text-[18px]">arrow_upward</span>
-                                    </button>
-                                    <div className="col-span-1 flex gap-2">
-                                        <button
-                                            disabled={actionLoading}
-                                            onClick={() => handleAction(selected.id, 'approve')}
-                                            className="flex-1 py-2.5 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/50 text-emerald-500 font-medium hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-1 text-sm disabled:opacity-50"
-                                        >
-                                            Approve
-                                            <span className="material-symbols-outlined text-[16px]">check</span>
-                                        </button>
-                                        <button
-                                            disabled={actionLoading}
-                                            onClick={() => handleAction(selected.id, 'reject')}
-                                            className="flex-1 py-2.5 px-3 rounded-lg bg-primary text-white font-bold hover:bg-primary-dark transition-colors shadow-lg shadow-primary/25 flex items-center justify-center gap-1 text-sm disabled:opacity-50"
-                                        >
-                                            Reject
-                                            <span className="material-symbols-outlined text-[16px]">close</span>
-                                        </button>
-                                    </div>
-                                </div>
-                                {actionLoading && (
-                                    <p className="text-center text-xs text-slate-500 mt-2">Processing action…</p>
-                                )}
-                            </div>
-                        </aside>
-                    )}
                 </div>
+
+                {/* Overlaid Detail Modal */}
+                {selectedId && (
+                    <ClaimDetailModal
+                        claimId={selectedId}
+                        onClose={() => setSelectedId(null)}
+                        onRefresh={() => { setSelectedId(null); refetch(); }}
+                    />
+                )}
             </div>
         </div>
     )
