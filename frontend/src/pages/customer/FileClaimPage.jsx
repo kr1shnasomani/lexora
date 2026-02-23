@@ -2,10 +2,11 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import BottomNav from '../../components/customer/BottomNav'
 import { useFetch } from '../../hooks/useFetch'
+import { useAuth } from '../../contexts/AuthContext'
 import { SkeletonList } from '../../components/shared/Skeleton'
 import ErrorToast from '../../components/shared/ErrorToast'
 
-const N8N_WEBHOOK = '/n8n/webhook/claim-upload'
+const N8N_WEBHOOK = 'http://10.149.50.194:5678/webhook/91f54ee7-85ce-4d26-a995-c07b50a8f907'
 
 /* ─── Evidence items per policy type (static UI config) ───────────────── */
 const EVIDENCE_ITEMS = {
@@ -26,13 +27,7 @@ const EVIDENCE_ITEMS = {
     ],
 }
 
-const CLAIM_TYPES = [
-    { key: 'delay', label: 'Trip Delay / Cancellation' },
-    { key: 'medical', label: 'Medical Emergency' },
-    { key: 'baggage', label: 'Lost / Damaged Baggage' },
-    { key: 'accident', label: 'Accident / Injury' },
-    { key: 'other', label: 'Other' },
-]
+
 
 const policyIcon = (type) => {
     const map = { health: 'cardiology', auto: 'directions_car', travel: 'flight', pet: 'pets', life: 'favorite' }
@@ -40,58 +35,67 @@ const policyIcon = (type) => {
 }
 
 /* ─── Step Documents ─────────────────────────────────────────────────── */
-function StepDocuments({ file, setFile }) {
+function StepDocuments({ files, setFiles }) {
     const fileRef = useRef(null)
     const handleDrop = (e) => {
         e.preventDefault()
-        const dropped = e.dataTransfer.files[0]
-        if (dropped) setFile(dropped)
+        addFiles(Array.from(e.dataTransfer.files))
+    }
+    const addFiles = (newFiles) => {
+        const validTypes = ['application/pdf', 'image/', 'audio/', 'video/']
+        const validFiles = newFiles.filter(f => validTypes.some(type => f.type.startsWith(type) || f.type === 'application/pdf'))
+        setFiles(prev => [...prev, ...validFiles])
+    }
+    const removeFile = (index) => {
+        setFiles(prev => prev.filter((_, i) => i !== index))
     }
     return (
         <div className="flex flex-col gap-8 max-w-3xl mx-auto">
             <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-white">Upload Evidence Document</h3>
+                    <h3 className="text-lg font-bold text-white">Upload Evidence Documents</h3>
                     <span className="text-xs text-primary bg-primary/10 px-2 py-1 rounded border border-primary/20">Required</span>
                 </div>
                 <div
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={handleDrop}
                     onClick={() => fileRef.current?.click()}
-                    className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center transition-all cursor-pointer group ${file ? 'border-primary/50 bg-primary/5' : 'border-[#27272a] hover:border-slate-500 bg-[#111115] hover:bg-[#1d1d20]'
-                        }`}
+                    className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center transition-all cursor-pointer group border-[#27272a] hover:border-slate-500 bg-[#111115] hover:bg-[#1d1d20]`}
                 >
-                    <input ref={fileRef} type="file" accept="image/*,.pdf,audio/*,video/*" className="hidden" onChange={(e) => setFile(e.target.files[0])} />
-                    {file ? (
-                        <div className="flex flex-col items-center">
-                            <div className="w-14 h-14 bg-primary/20 text-primary rounded-full flex items-center justify-center mb-4">
-                                <span className="material-symbols-outlined text-3xl">description</span>
-                            </div>
-                            <h4 className="text-white font-medium text-lg mb-1">{file.name}</h4>
-                            <p className="text-slate-400 text-sm mb-4">{(file.size / 1024).toFixed(1)} KB &bull; {file.type || 'Document'}</p>
-                            <button onClick={(e) => { e.stopPropagation(); setFile(null) }} className="text-sm text-red-400 hover:text-red-300 font-medium transition-colors">
-                                Remove file
-                            </button>
+                    <input ref={fileRef} type="file" multiple accept="image/*,.pdf,audio/*,video/*" className="hidden" onChange={(e) => { addFiles(Array.from(e.target.files)); e.target.value = null }} />
+                    <div className="flex flex-col items-center">
+                        <div className="w-16 h-16 bg-[#27272a] text-slate-400 rounded-full flex items-center justify-center mb-4 group-hover:text-primary group-hover:bg-primary/10 transition-colors">
+                            <span className="material-symbols-outlined text-3xl">cloud_upload</span>
                         </div>
-                    ) : (
-                        <div className="flex flex-col items-center">
-                            <div className="w-16 h-16 bg-[#27272a] text-slate-400 rounded-full flex items-center justify-center mb-4 group-hover:text-primary group-hover:bg-primary/10 transition-colors">
-                                <span className="material-symbols-outlined text-3xl">cloud_upload</span>
-                            </div>
-                            <h4 className="text-white font-medium text-lg mb-1">Drag and drop or click to browse</h4>
-                            <p className="text-slate-400 text-sm">Supported: PDF, JPG, PNG, Audio, Video (Max 8MB)</p>
-                        </div>
-                    )}
+                        <h4 className="text-white font-medium text-lg mb-1">Drag and drop or click to browse</h4>
+                        <p className="text-slate-400 text-sm">Supported: PDF, JPG, PNG, Audio, Video (Max 8MB)</p>
+                    </div>
                 </div>
-                <p className="text-xs text-slate-500">Your document is sent to our AI extraction engine (Layer 1) which reads the details automatically — you don't need to fill in amounts or provider names manually.</p>
+
+                {files.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-3">
+                        {files.map((f, i) => (
+                            <div key={i} className="flex items-center gap-3 bg-[#27272a]/50 border border-[#27272a] rounded-xl px-4 py-2 hover:bg-[#27272a] transition-colors" onClick={(e) => e.stopPropagation()}>
+                                <span className="material-symbols-outlined text-primary text-xl">description</span>
+                                <div className="flex flex-col max-w-[150px] overflow-hidden">
+                                    <span className="text-white text-sm font-medium truncate">{f.name}</span>
+                                    <span className="text-slate-400 text-xs">{(f.size / 1024).toFixed(1)} KB</span>
+                                </div>
+                                <button onClick={() => removeFile(i)} className="text-slate-400 hover:text-red-400 ml-2 p-1.5 rounded-full hover:bg-black/20 flex items-center justify-center transition-colors">
+                                    <span className="material-symbols-outlined text-[16px]">close</span>
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <p className="text-xs text-slate-500 mt-2">Your documents are sent to our AI extraction engine (Layer 1) which reads the details automatically — you don't need to fill in amounts or provider names manually.</p>
             </div>
         </div>
     )
 }
 
 /* ─── Step Review ─────────────────────────────────────────────────────── */
-function StepReview({ policy, claimType, description, incidentDate, file }) {
-    const ct = CLAIM_TYPES.find(c => c.key === claimType)
+function StepReview({ policy, files }) {
     return (
         <div className="flex flex-col gap-6 max-w-3xl mx-auto">
             <div className="bg-[#111115] border border-[#27272a] rounded-2xl p-6 space-y-5">
@@ -105,26 +109,26 @@ function StepReview({ policy, claimType, description, incidentDate, file }) {
                         <p className="text-slate-500 text-xs font-mono">Policy #{policy?.policy_number || '—'}</p>
                     </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Claim Type</p><p className="text-white text-sm font-medium">{ct?.label || '—'}</p></div>
-                    <div><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Incident Date</p><p className="text-white text-sm font-medium">{incidentDate || '—'}</p></div>
-                </div>
-                <div><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Description</p><p className="text-slate-300 text-sm leading-relaxed">{description || '—'}</p></div>
-                <div className="pt-4 border-t border-[#27272a]">
-                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Attached Document</p>
-                    {file ? (
-                        <div className="flex items-center gap-3 p-3 rounded-xl bg-[#0A0A0C] border border-[#27272a]">
-                            <span className="material-symbols-outlined text-primary">description</span>
-                            <div>
-                                <p className="text-white text-sm font-medium">{file.name}</p>
-                                <p className="text-slate-500 text-xs">{(file.size / 1024).toFixed(1)} KB</p>
-                            </div>
-                            <span className="ml-auto flex items-center gap-1 text-emerald-500 text-xs font-bold">
-                                <span className="material-symbols-outlined text-sm">check_circle</span>Ready
-                            </span>
+
+                <div className="pt-2">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Attached Documents ({files?.length || 0})</p>
+                    {files?.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                            {files.map((file, i) => (
+                                <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-[#0A0A0C] border border-[#27272a]">
+                                    <span className="material-symbols-outlined text-primary">description</span>
+                                    <div>
+                                        <p className="text-white text-sm font-medium">{file.name}</p>
+                                        <p className="text-slate-500 text-xs">{(file.size / 1024).toFixed(1)} KB</p>
+                                    </div>
+                                    <span className="ml-auto flex items-center gap-1 text-emerald-500 text-xs font-bold">
+                                        <span className="material-symbols-outlined text-sm">check_circle</span>Ready
+                                    </span>
+                                </div>
+                            ))}
                         </div>
                     ) : (
-                        <p className="text-slate-500 text-sm italic">No document attached — go back to upload one.</p>
+                        <p className="text-slate-500 text-sm italic">No documents attached — go back to upload some.</p>
                     )}
                 </div>
             </div>
@@ -132,7 +136,7 @@ function StepReview({ policy, claimType, description, incidentDate, file }) {
                 <span className="material-symbols-outlined text-primary mt-0.5">auto_awesome</span>
                 <div>
                     <p className="text-sm font-semibold text-white">AI-Accelerated Processing</p>
-                    <p className="text-xs text-slate-400 mt-0.5">Your document will be sent to our AI extraction engine (Layer 1), which reads claim details automatically. Typical processing time is under 24 hours.</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Your documents will be sent to our AI extraction engine (Layer 1), which reads claim details automatically. Typical processing time is under 15 minutes.</p>
                 </div>
             </div>
         </div>
@@ -142,15 +146,13 @@ function StepReview({ policy, claimType, description, incidentDate, file }) {
 /* ─── Main Page ──────────────────────────────────────────────────────── */
 export default function FileClaimPage() {
     const navigate = useNavigate()
-    const { data: policiesData, loading: policiesLoading } = useFetch('/api/policies?status=active')
-    const policies = policiesData?.items || []
+    const { user } = useAuth()
+    const { data: policiesData, loading: policiesLoading } = useFetch(user?.email ? `/api/customer/policies?email=${encodeURIComponent(user.email)}` : null)
+    const policies = policiesData?.policies || []
 
     const [step, setStep] = useState(1)
     const [selectedPolicyId, setSelectedPolicyId] = useState(null)
-    const [claimType, setClaimType] = useState('')
-    const [description, setDescription] = useState('')
-    const [incidentDate, setIncidentDate] = useState('')
-    const [file, setFile] = useState(null)
+    const [files, setFiles] = useState([])
     const [submitting, setSubmitting] = useState(false)
     const [submitError, setSubmitError] = useState(null)
     const [submitted, setSubmitted] = useState(false)
@@ -158,25 +160,37 @@ export default function FileClaimPage() {
     const selectedPolicy = policies.find(p => p.id === selectedPolicyId) || policies[0]
 
     const handleContinue = async () => {
-        if (step < 3) { setStep(s => s + 1); return }
+        if (step === 1) {
+            setStep(2)
+            return
+        }
+        if (step === 2) {
+            if (files.length === 0) {
+                setSubmitError('Please upload at least one evidence document before continuing to Review.')
+                return
+            }
+            setSubmitError(null)
+            setStep(3)
+            return
+        }
         // Step 3 → Submit via n8n webhook
-        if (!file) {
+        if (files.length === 0) {
             setSubmitError('Please upload at least one document on the previous step.')
             return
         }
         setSubmitting(true)
         setSubmitError(null)
         try {
-            const formData = new FormData()
-            formData.append('file', file)
-            formData.append('policy_id', selectedPolicy?.id || '')
-            formData.append('policy_number', selectedPolicy?.policy_number || '')
-            formData.append('incident_date', incidentDate || '')
-            formData.append('incident_type', claimType || 'other')
-            formData.append('incident_description', description || '')
+            await Promise.all(files.map(async (f) => {
+                const formData = new FormData()
+                formData.append('file', f)
+                formData.append('policy_id', selectedPolicy?.id || '')
+                formData.append('policy_number', selectedPolicy?.policy_number || '')
 
-            const res = await fetch(N8N_WEBHOOK, { method: 'POST', body: formData })
-            if (!res.ok) throw new Error(`n8n responded with ${res.status}: ${res.statusText}`)
+                const res = await fetch(N8N_WEBHOOK, { method: 'POST', body: formData })
+                if (!res.ok) throw new Error(`n8n responded with ${res.status}: ${res.statusText}`)
+            }))
+
             setSubmitted(true)
         } catch (err) {
             setSubmitError(err.message || 'Submission failed — please ensure n8n is running and try again.')
@@ -196,7 +210,7 @@ export default function FileClaimPage() {
                         <span className="material-symbols-outlined text-5xl">check_circle</span>
                     </div>
                     <h2 className="text-2xl font-bold text-white mb-3">Claim Submitted!</h2>
-                    <p className="text-slate-400 text-sm mb-8">Your document has been sent to the AI extraction engine. Processing typically completes within a few minutes.</p>
+                    <p className="text-slate-400 text-sm mb-8">Your documents have been sent to the AI extraction engine. Processing typically completes within a few minutes.</p>
                     <button onClick={() => navigate('/customer')} className="bg-primary hover:bg-red-600 text-white font-bold py-3 px-8 rounded-xl transition-all">
                         Return to Dashboard
                     </button>
@@ -261,7 +275,7 @@ export default function FileClaimPage() {
                     </div>
 
                     {/* Body */}
-                    <div className="flex-1 overflow-y-auto p-6 bg-[#0A0A0C]">
+                    <div className="flex-1 overflow-y-auto p-6 bg-[#0A0A0C] min-h-[450px]">
                         {step === 1 && (
                             <div className="flex flex-col gap-8 max-w-3xl mx-auto">
                                 {/* Policy picker */}
@@ -280,8 +294,13 @@ export default function FileClaimPage() {
                                                         </div>
                                                         <h4 className="text-white font-bold text-base mb-1">{p.name}</h4>
                                                         <p className="text-slate-500 text-xs font-mono">{p.policy_number}</p>
-                                                        <div className="mt-3 flex items-center gap-2 text-[10px] text-emerald-500 font-bold uppercase tracking-wide">
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Active
+                                                        <div className="mt-4 pt-3 border-t border-[#27272a] flex items-center justify-between">
+                                                            <div className="flex items-center gap-1.5 text-[10px] text-emerald-500 font-bold uppercase tracking-wide">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Active
+                                                            </div>
+                                                            <div className="text-[10px] text-slate-400">
+                                                                Max: <span className="text-white font-bold text-xs tracking-wide">₹{(p.type === 'health' ? 500000 : p.type === 'auto' ? 200000 : 100000).toLocaleString('en-IN')}</span>
+                                                            </div>
                                                         </div>
                                                     </button>
                                                 ))}
@@ -289,36 +308,10 @@ export default function FileClaimPage() {
                                         )
                                     }
                                 </div>
-                                <div className="w-full h-px bg-[#27272a]" />
-                                {/* Claim type */}
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Claim Type</h3>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {CLAIM_TYPES.map(ct => (
-                                            <button key={ct.key} onClick={() => setClaimType(ct.key)}
-                                                className={`p-3 rounded-xl border text-left text-sm font-medium transition-all ${claimType === ct.key ? 'border-primary bg-primary/10 text-white' : 'border-[#27272a] bg-[#111115] text-slate-400 hover:border-slate-500 hover:text-white'}`}>
-                                                {ct.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                {/* Incident date */}
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Incident Date</h3>
-                                    <input type="date" value={incidentDate} onChange={e => setIncidentDate(e.target.value)}
-                                        className="w-full rounded-xl border border-[#27272a] bg-[#111115] px-4 py-3 text-white text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary [color-scheme:dark]" />
-                                </div>
-                                {/* Description */}
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Describe the Incident</h3>
-                                    <textarea rows={4} value={description} onChange={e => setDescription(e.target.value)}
-                                        placeholder="Provide a clear description of what happened, where, and any losses incurred..."
-                                        className="w-full rounded-xl border border-[#27272a] bg-[#111115] px-4 py-3 text-white text-sm placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none" />
-                                </div>
                             </div>
                         )}
-                        {step === 2 && <StepDocuments file={file} setFile={setFile} />}
-                        {step === 3 && <StepReview policy={selectedPolicy} claimType={claimType} description={description} incidentDate={incidentDate} file={file} />}
+                        {step === 2 && <StepDocuments files={files} setFiles={setFiles} />}
+                        {step === 3 && <StepReview policy={selectedPolicy} files={files} />}
                     </div>
 
                     {/* Footer */}

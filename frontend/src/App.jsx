@@ -19,7 +19,7 @@ import ConfigPage from './pages/admin/ConfigPage'
 import HomePage from './pages/customer/HomePage'
 import PoliciesPage from './pages/customer/PoliciesPage'
 import ClaimsPage from './pages/customer/ClaimsPage'
-import ClaimResultPage from './pages/customer/ClaimResultPage'
+import ClaimStatus from './pages/customer/ClaimStatus'
 import ExplorePage from './pages/customer/ExplorePage'
 import PolicyDetailPage from './pages/customer/PolicyDetailPage'
 import DocsPage from './pages/customer/DocsPage'
@@ -54,7 +54,7 @@ export default function App() {
                     <Route path="/customer" element={<ProtectedRoute requiredRole="customer"><HomePage /></ProtectedRoute>} />
                     <Route path="/customer/policies" element={<ProtectedRoute requiredRole="customer"><PoliciesPage /></ProtectedRoute>} />
                     <Route path="/customer/claims" element={<ProtectedRoute requiredRole="customer"><ClaimsPage /></ProtectedRoute>} />
-                    <Route path="/customer/claim-result" element={<ProtectedRoute requiredRole="customer"><ClaimResultPage /></ProtectedRoute>} />
+                    <Route path="/customer/claim-status" element={<ProtectedRoute requiredRole="customer"><ClaimStatus /></ProtectedRoute>} />
                     <Route path="/customer/explore" element={<ProtectedRoute requiredRole="customer"><ExplorePage /></ProtectedRoute>} />
                     <Route path="/customer/policy-detail" element={<ProtectedRoute requiredRole="customer"><PolicyDetailPage /></ProtectedRoute>} />
                     <Route path="/customer/docs" element={<ProtectedRoute requiredRole="customer"><DocsPage /></ProtectedRoute>} />
