@@ -13,14 +13,19 @@ export default function ClaimStatus() {
 
     // Normalize status into 3 known states for the UI
     let viewState = 'pending'
-    const statusParam = (claim?.status || 'pending').toLowerCase()
-    if (['approved', 'settled', 'finalized'].includes(statusParam)) viewState = 'approved'
-    if (['rejected', 'denied', 'error', 'action'].includes(statusParam)) viewState = 'rejected'
+    const finalDec = (claim?.final_decision || '').toLowerCase()
+    const statusVal = (claim?.status || 'pending').toLowerCase()
+
+    if (finalDec.includes('reject') || statusVal.includes('reject') || statusVal === 'error') {
+        viewState = 'rejected'
+    } else if (finalDec.includes('approve') || ['approved', 'settled', 'finalized'].includes(statusVal)) {
+        viewState = 'approved'
+    }
 
     const fmt = (num) => `₹${Number(num || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    const decision = claim?.decision_output || {}
-    const fins = decision.financials || {}
-    const reasons = decision.reasons || []
+    const pd = claim?.policy_decision || {}
+    const fins = pd.financials || {}
+    const reasons = pd.reasons || []
 
     // UI Configuration based on state mapping exactly to the 3 mockups
     const uiConfig = {
@@ -41,7 +46,7 @@ export default function ClaimStatus() {
             logicIconBg: 'bg-primary/10 text-primary',
             logicDesc: <>This claim matches <strong className="text-white">Policy {claim?.policy?.policy_number}</strong> active coverage. Recommended payout generated based on terms. {reasons.length > 0 ? reasons[0].message : 'No anomalies detected.'}</>,
             stats: [
-                { label: 'Original Claim', value: fmt(claim?.claimed_amount) },
+                { label: 'Original Claim', value: fmt(fins.claimed_amount || claim?.claimed_amount || claim?.amount) },
                 { label: 'Deductible/Co-pay', value: `- ${fmt(fins.deductible || 0)}`, color: 'text-primary' },
                 { label: 'Policy Match', value: <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">verified_user</span> 100% Match</span>, color: 'text-[#10b981]' }
             ],
@@ -92,7 +97,7 @@ export default function ClaimStatus() {
             logicIconBg: 'bg-primary/10 text-primary',
             logicDesc: <>This claim has been flagged based on the policy terms. The submitted procedure documentation does not meet the specified criteria for disbursement.</>,
             stats: [
-                { label: 'Claimed Amount', value: <span className="line-through decoration-slate-600">{fmt(claim?.claimed_amount)}</span>, color: 'text-slate-400' },
+                { label: 'Claimed Amount', value: <span className="line-through decoration-slate-600">{fmt(fins.claimed_amount || claim?.claimed_amount || claim?.amount)}</span>, color: 'text-slate-400' },
                 { label: 'Reason Code', value: reasons.length > 0 ? reasons[0].code : 'N/A', color: 'text-primary' },
                 { label: 'Status', value: <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">block</span> Rejected</span>, color: 'text-primary' }
             ],

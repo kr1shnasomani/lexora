@@ -309,21 +309,53 @@ async def run_full_pipeline(claim_id: str):
         enforce_transition("extracted", "policy_evaluating")
         db.table("claims").update({"status": "policy_evaluating"}).eq("id", claim_id).execute()
         results["policy"] = evaluate_policy(claim_id)
+
+        # Inspect if Layer 2 outright rejected it
+        if results["policy"].get("outcome", {}).get("status") == "REJECT":
+            update_payload = {
+                "policy_decision": json.dumps(results["policy"]),
+                "status": "finalized",
+                "final_decision": "auto_reject",
+                "processed_at": datetime.utcnow().isoformat(),
+            }
+            db.table("claims").update(update_payload).eq("id", claim_id).execute()
+            results["new_status"] = "finalized"
+            return results
+
+        # Determine target state based on Layer 2 status
+        l2_status = results["policy"].get("outcome", {}).get("status")
+        next_status = "fraud_checking"
+        
         db.table("claims").update({
             "policy_decision": json.dumps(results["policy"]),
-            "status": "fraud_checking",
+            "status": next_status,
         }).eq("id", claim_id).execute()
 
     # Step 2: Fraud
-    current = db.table("claims").select("status").eq("id", claim_id).single().execute().data
+    current = db.table("claims").select("status, policy_decision").eq("id", claim_id).single().execute().data
+    
     if current["status"] == "fraud_checking":
         fraud_result = run_fraud_check(claim_id)
         results["fraud"] = fraud_result
+        
+        # Check if Layer 2 requested a manual review
+        policy_decision = current.get("policy_decision") or {}
+        if isinstance(policy_decision, str):
+            policy_decision = json.loads(policy_decision)
+            
+        needs_review = policy_decision.get("outcome", {}).get("status") == "REVIEW"
+        
+        next_status = "under_review" if needs_review else "deciding"
+        
         db.table("claims").update({
             "fraud_score": fraud_result["fraud_score"],
             "fraud_analysis": json.dumps(fraud_result["fraud_analysis"]),
-            "status": "deciding",
+            "status": next_status,
         }).eq("id", claim_id).execute()
+        
+        if needs_review:
+            results["new_status"] = "under_review"
+            return results
 
     # Step 3: Decision
     current = db.table("claims").select("status").eq("id", claim_id).single().execute().data
@@ -465,3 +497,38 @@ async def run_layer2_batch():
         "claim_ids_success": success_ids,
         "claim_ids_failed": failed_entries,
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# POST /claims/process-pending — Sweep for automated pipeline progression
+# ─────────────────────────────────────────────────────────────
+@router.post("/process-pending")
+async def process_pending():
+    """Find claims stuck in intermediate states and systematically bounce them through run_full_pipeline"""
+    db = get_supabase()
+    
+    # Target any states that constitute intermediate automation
+    result = (
+        db.table("claims")
+        .select("id, status")
+        .in_("status", ["submitted", "extracted", "policy_evaluating", "fraud_checking", "deciding"])
+        .order("created_at", desc=False)
+        .execute()
+    )
+    pending = result.data or []
+
+    if not pending:
+        return {"processed_count": 0, "logs": [], "message": "No intermediate claims pending pipeline processing"}
+
+    logs = []
+    
+    for row in pending:
+        claim_id = row["id"]
+        try:
+            res = await run_full_pipeline(claim_id)
+            logs.append({"claim_id": claim_id, "status": "success", "new_status": res.get("new_status")})
+        except Exception as e:
+            # Catch errors to permit other claims to finish
+            logs.append({"claim_id": claim_id, "status": "error", "error": str(e)})
+
+    return {"processed_count": len(pending), "logs": logs}

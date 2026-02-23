@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { AuthProvider } from './contexts/AuthContext'
 import ProtectedRoute from './components/shared/ProtectedRoute'
 
@@ -30,10 +31,29 @@ import ChatPage from './pages/customer/ChatPage'
 import RenewalPage from './pages/customer/RenewalPage'
 import FileClaimPage from './pages/customer/FileClaimPage'
 
+function ForceRedirect() {
+    const navigate = useNavigate()
+
+    useEffect(() => {
+        // Only run this check once when the app first loads in the browser tab
+        if (!sessionStorage.getItem('has_loaded_once')) {
+            sessionStorage.setItem('has_loaded_once', 'true')
+
+            // If the user lands on any path other than root during a fresh load, send them back
+            if (window.location.pathname !== '/') {
+                navigate('/', { replace: true })
+            }
+        }
+    }, [navigate])
+
+    return null
+}
+
 export default function App() {
     return (
         <AuthProvider>
             <BrowserRouter>
+                <ForceRedirect />
                 <Routes>
                     {/* ─── Landing ─────────────────────────────────── */}
                     <Route path="/" element={<ModeSelectionPage />} />

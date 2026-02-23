@@ -239,7 +239,7 @@ async def get_customer_claim_detail(claim_id: str, email: str = Query(...)):
 
     # Parse JSON structured outputs so the frontend can safely bind and format them
     import json
-    for json_col in ["extraction_raw", "decision_output", "current_state_context", "fraud_analysis"]:
+    for json_col in ["extraction_raw", "decision_output", "current_state_context", "fraud_analysis", "policy_decision"]:
         if claim.get(json_col):
             try:
                 claim[json_col] = json.loads(claim[json_col]) if isinstance(claim[json_col], str) else claim[json_col]
