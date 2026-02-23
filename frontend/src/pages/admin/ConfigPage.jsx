@@ -41,6 +41,7 @@ export default function ConfigPage() {
                 modified: t.modified || '—',
                 version: t.version || '',
                 highlight: !!t.highlight,
+                prefix: t.key.split('.')[0] || 'other'
             })))
         }
         if (data.flags) {
@@ -64,16 +65,10 @@ export default function ConfigPage() {
         setSaving(true)
         setSaveError(null)
         try {
-            // PUT each modified threshold
             await Promise.all(
                 thresholds.map(t =>
                     api.put(`/api/config/${encodeURIComponent(t.key)}`, {
-                        key: t.key,
-                        value: t.value,
-                        description: t.desc,
-                        modified: 'Just now',
-                        version: t.version,
-                        highlight: t.highlight,
+                        value: t.value
                     })
                 )
             )
@@ -88,6 +83,81 @@ export default function ConfigPage() {
 
     const filtered = thresholds.filter(t => t.key.toLowerCase().includes(search.toLowerCase()))
 
+    // Grouping by layer prefix
+    const layer3Fraud = filtered.filter(t => t.prefix === 'fraud')
+    const layer4Routing = filtered.filter(t => t.prefix === 'routing')
+    const layer2Policy = filtered.filter(t => t.prefix === 'policy')
+    const others = filtered.filter(t => !['fraud', 'routing', 'policy'].includes(t.prefix))
+
+    const renderThresholdTable = (title, icon, items) => {
+        if (items.length === 0 && !loading) return null;
+        return (
+            <div className="rounded-xl border border-border-dark bg-surface-dark p-6 mb-6">
+                <div className="mb-5 flex items-center justify-between gap-4 flex-wrap">
+                    <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+                        <span className={`material-symbols-outlined text-primary`}>{icon}</span>
+                        {title}
+                    </h2>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-border-dark">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-background-dark text-slate-500">
+                            <tr>
+                                <th className="px-4 py-3 font-medium">Config Key</th>
+                                <th className="px-4 py-3 font-medium">Value</th>
+                                <th className="px-4 py-3 font-medium text-right">Modified</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-dark">
+                            {loading
+                                ? [0, 1].map(i => (
+                                    <tr key={i} className="animate-pulse">
+                                        <td className="px-4 py-4"><div className="h-3 bg-white/10 rounded w-36" /></td>
+                                        <td className="px-4 py-4"><div className="h-3 bg-white/10 rounded w-12" /></td>
+                                        <td className="px-4 py-4"><div className="h-3 bg-white/10 rounded w-20 ml-auto" /></td>
+                                    </tr>
+                                ))
+                                : items.map(t => (
+                                    <tr key={t.key} className="group hover:bg-[#38292b]/40 transition-colors">
+                                        <td className="px-4 py-4">
+                                            <div className="flex items-center gap-2 relative">
+                                                <span className={`font-mono text-sm ${t.highlight ? 'text-primary' : 'text-slate-300'}`}>{t.key}</span>
+                                                <div className="relative flex items-center group/tooltip">
+                                                    <span className="material-symbols-outlined text-[16px] text-slate-500 hover:text-white cursor-help transition-colors">help</span>
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-background-dark border border-border-dark rounded-lg text-xs text-slate-300 opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl z-10 pointer-events-none">
+                                                        {t.desc}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={t.value}
+                                                    onChange={e => handleValueChange(t.key, e.target.value)}
+                                                    className="w-full max-w-[140px] rounded border border-border-dark bg-background-dark px-2 py-1 text-right font-mono text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all"
+                                                />
+                                                <span className="material-symbols-outlined text-[17px] text-slate-500 opacity-0 group-hover:opacity-100 hover:text-primary cursor-pointer transition-all">edit</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 text-right">
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-xs text-white">{t.modified}</span>
+                                                <span className="rounded bg-border-dark px-1.5 py-0.5 text-[10px] font-medium text-slate-400">{t.version}</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="flex h-screen bg-background-dark overflow-hidden">
             <Sidebar />
@@ -96,7 +166,7 @@ export default function ConfigPage() {
 
                 <main className="flex-1 overflow-y-auto">
                     {/* Sub-header */}
-                    <div className="border-b border-border-dark bg-background-dark/80 backdrop-blur-md px-6 py-5">
+                    <div className="border-b border-border-dark bg-background-dark/80 backdrop-blur-md px-6 py-5 sticky top-0 z-20">
                         <nav className="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
                             <span className="hover:text-primary cursor-pointer transition-colors">Home</span>
                             <span className="material-symbols-outlined text-[14px]">chevron_right</span>
@@ -109,15 +179,21 @@ export default function ConfigPage() {
                                 <h1 className="text-2xl font-bold text-white tracking-tight">System Configuration</h1>
                                 <p className="text-sm text-slate-400 mt-0.5">Manage fraud thresholds and global feature flags.</p>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border-dark text-sm font-medium text-slate-400 hover:bg-surface-dark hover:text-white transition-colors">
-                                    <span className="material-symbols-outlined text-[18px]">history</span>
-                                    Revert Defaults
-                                </button>
+                            <div className="flex items-center gap-4">
+                                <div className="relative w-64 hidden md:block">
+                                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">search</span>
+                                    <input
+                                        type="text"
+                                        value={search}
+                                        onChange={e => setSearch(e.target.value)}
+                                        placeholder="Search config keys…"
+                                        className="w-full pl-9 pr-4 py-2 rounded-lg bg-surface-dark border border-border-dark text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                                    />
+                                </div>
                                 <button
                                     onClick={handleSave}
                                     disabled={saving}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white shadow-lg transition-all disabled:opacity-60 ${saved ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-primary hover:bg-[#d02038] shadow-primary/20'}`}
+                                    className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold text-white shadow-lg transition-all disabled:opacity-60 ${saved ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-primary hover:bg-[#d02038] shadow-primary/20'}`}
                                 >
                                     <span className="material-symbols-outlined text-[18px]">{saving ? 'hourglass_empty' : saved ? 'check' : 'save'}</span>
                                     {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Changes'}
@@ -140,85 +216,17 @@ export default function ConfigPage() {
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
 
                             {/* LEFT: 8 cols */}
-                            <div className="lg:col-span-8 flex flex-col gap-6">
+                            <div className="lg:col-span-8 flex flex-col">
+                                {renderThresholdTable("Layer 2: Policy Configs", "policy", layer2Policy)}
+                                {renderThresholdTable("Layer 3: Fraud Engine", "coronavirus", layer3Fraud)}
+                                {renderThresholdTable("Layer 4: Decision Routing", "alt_route", layer4Routing)}
+                                {renderThresholdTable("Other Configs", "settings", others)}
 
-                                {/* Fraud Thresholds Table */}
-                                <div className="rounded-xl border border-border-dark bg-surface-dark p-6">
-                                    <div className="mb-5 flex items-center justify-between gap-4 flex-wrap">
-                                        <h2 className="flex items-center gap-2 text-lg font-bold text-white">
-                                            <span className="material-symbols-outlined text-primary">tune</span>
-                                            Fraud Thresholds
-                                        </h2>
-                                        <div className="relative w-60">
-                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">search</span>
-                                            <input
-                                                type="text"
-                                                value={search}
-                                                onChange={e => setSearch(e.target.value)}
-                                                placeholder="Search config keys…"
-                                                className="w-full pl-9 pr-4 py-2 rounded-lg bg-background-dark border border-border-dark text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
-                                            />
-                                        </div>
+                                {!loading && filtered.length === 0 && (
+                                    <div className="p-8 text-center text-slate-500 bg-surface-dark rounded-xl border border-border-dark">
+                                        No configuration keys match "{search}"
                                     </div>
-
-                                    <div className="overflow-hidden rounded-lg border border-border-dark">
-                                        <table className="w-full text-left text-sm">
-                                            <thead className="bg-background-dark text-slate-500">
-                                                <tr>
-                                                    <th className="px-4 py-3 font-medium">Config Key</th>
-                                                    <th className="px-4 py-3 font-medium">Value</th>
-                                                    <th className="px-4 py-3 font-medium text-right">Modified</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-border-dark">
-                                                {loading && thresholds.length === 0
-                                                    ? [0, 1, 2].map(i => (
-                                                        <tr key={i} className="animate-pulse">
-                                                            <td className="px-4 py-4"><div className="h-3 bg-white/10 rounded w-36" /></td>
-                                                            <td className="px-4 py-4"><div className="h-3 bg-white/10 rounded w-12" /></td>
-                                                            <td className="px-4 py-4"><div className="h-3 bg-white/10 rounded w-20 ml-auto" /></td>
-                                                        </tr>
-                                                    ))
-                                                    : filtered.map(t => (
-                                                        <tr key={t.key} className="group hover:bg-[#38292b]/40 transition-colors">
-                                                            <td className="px-4 py-4">
-                                                                <div className="flex flex-col gap-0.5">
-                                                                    <span className={`font-mono text-sm ${t.highlight ? 'text-primary' : 'text-slate-300'}`}>{t.key}</span>
-                                                                    <span className="text-xs text-slate-500">{t.desc}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4">
-                                                                <div className="flex items-center gap-2">
-                                                                    <input
-                                                                        type="text"
-                                                                        value={t.value}
-                                                                        onChange={e => handleValueChange(t.key, e.target.value)}
-                                                                        className="w-24 rounded border border-border-dark bg-background-dark px-2 py-1 text-right font-mono text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all"
-                                                                    />
-                                                                    <span className="material-symbols-outlined text-[17px] text-slate-500 opacity-0 group-hover:opacity-100 hover:text-primary cursor-pointer transition-all">edit</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4 text-right">
-                                                                <div className="flex flex-col items-end gap-1">
-                                                                    <span className="text-xs text-white">{t.modified}</span>
-                                                                    <span className="rounded bg-border-dark px-1.5 py-0.5 text-[10px] font-medium text-slate-400">{t.version}</span>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                }
-                                                {!loading && filtered.length === 0 && (
-                                                    <tr>
-                                                        <td colSpan={3} className="px-4 py-6 text-center text-sm text-slate-500">No keys match "{search}"</td>
-                                                    </tr>
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div className="mt-4 flex items-center text-xs text-slate-500">
-                                        <span>Showing {filtered.length} of {thresholds.length} keys</span>
-                                    </div>
-                                </div>
+                                )}
                             </div>
 
                             {/* RIGHT: 4 cols */}

@@ -15,6 +15,9 @@ from routes.customer import router as customer_router, user_router, notification
 from routes.dashboard import router as dashboard_router
 from routes.auth import router as auth_router
 from routes.pdf_export import router as pdf_export_router
+from routes.config import router as config_router
+from routes.network import router as network_router
+
 
 settings = get_settings()
 
@@ -43,6 +46,9 @@ app.include_router(notifications_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(pdf_export_router, prefix="/api")
+app.include_router(config_router, prefix="/api")
+app.include_router(network_router, prefix="/api")
+
 
 @app.on_event("startup")
 async def startup_event():
