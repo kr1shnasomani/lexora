@@ -14,6 +14,7 @@ from routes.webhooks import router as webhooks_router
 from routes.customer import router as customer_router, user_router, notifications_router
 from routes.dashboard import router as dashboard_router
 from routes.auth import router as auth_router
+from routes.pdf_export import router as pdf_export_router
 
 settings = get_settings()
 
@@ -41,6 +42,7 @@ app.include_router(user_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(pdf_export_router, prefix="/api")
 
 @app.on_event("startup")
 async def startup_event():

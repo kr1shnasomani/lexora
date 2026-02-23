@@ -2,6 +2,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useFetch } from '../../hooks/useFetch'
+import { downloadClaimPDF } from '../../lib/api'
+import ErrorToast from '../../components/shared/ErrorToast'
 
 export default function ClaimStatus() {
     const navigate = useNavigate()
@@ -10,6 +12,21 @@ export default function ClaimStatus() {
 
     const { user } = useAuth()
     const { data: claim, loading, error } = useFetch(user?.email && claimId ? `/api/customer/claims/${claimId}?email=${encodeURIComponent(user.email)}` : null)
+
+    const [toastError, setToastError] = useState(null)
+    const [downloading, setDownloading] = useState(false)
+
+    const handleDownload = async () => {
+        if (!claimId || !user?.email) return
+        setDownloading(true)
+        try {
+            await downloadClaimPDF(claimId, user.email)
+        } catch (e) {
+            setToastError(e.message)
+        } finally {
+            setDownloading(false)
+        }
+    }
 
     // Normalize status into 3 known states for the UI
     let viewState = 'pending'
@@ -50,7 +67,7 @@ export default function ClaimStatus() {
                 { label: 'Deductible/Co-pay', value: `- ${fmt(fins.deductible || 0)}`, color: 'text-primary' },
                 { label: 'Policy Match', value: <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">verified_user</span> 100% Match</span>, color: 'text-[#10b981]' }
             ],
-            btn1: { label: 'Download Decision Letter', icon: 'download' },
+            btn1: { label: 'Download Decision Letter', icon: 'download', downloadPdf: true },
             btn2: { label: 'Return to Queue', icon: 'arrow_forward', primary: true },
             gradientBottom: 'via-[#10b981]'
         },
@@ -101,7 +118,7 @@ export default function ClaimStatus() {
                 { label: 'Reason Code', value: reasons.length > 0 ? reasons[0].code : 'N/A', color: 'text-primary' },
                 { label: 'Status', value: <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">block</span> Rejected</span>, color: 'text-primary' }
             ],
-            btn1: { label: 'View Full Report', icon: 'description' },
+            btn1: { label: 'View Full Report', icon: 'description', downloadPdf: true },
             btn2: { label: 'Next Claim', icon: 'arrow_forward', primary: true, btnColor: 'bg-white/5 hover:bg-white/10 text-white border border-white/10 shadow-none hover:shadow-none' },
             gradientBottom: 'via-primary'
         }
@@ -205,10 +222,23 @@ export default function ClaimStatus() {
 
                     {/* Actions */}
                     <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto mt-4">
-                        <button className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#38292b] hover:bg-[#4a3b3d] text-white px-6 py-3 rounded-lg font-medium transition-colors border border-transparent hover:border-slate-600">
-                            <span className="material-symbols-outlined">{c.btn1.icon}</span>
-                            <span>{c.btn1.label}</span>
-                        </button>
+                        {c.btn1.downloadPdf ? (
+                            <button
+                                onClick={handleDownload}
+                                disabled={downloading}
+                                className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#38292b] hover:bg-[#4a3b3d] text-white px-6 py-3 rounded-lg font-medium transition-colors border border-transparent hover:border-slate-600 disabled:opacity-50"
+                            >
+                                <span className={`material-symbols-outlined ${downloading ? 'animate-pulse text-primary' : ''}`}>
+                                    {downloading ? 'cloud_download' : c.btn1.icon}
+                                </span>
+                                <span>{downloading ? 'Generating...' : c.btn1.label}</span>
+                            </button>
+                        ) : (
+                            <button className="w-full md:w-auto flex items-center justify-center gap-2 bg-[#38292b] hover:bg-[#4a3b3d] text-white px-6 py-3 rounded-lg font-medium transition-colors border border-transparent hover:border-slate-600">
+                                <span className="material-symbols-outlined">{c.btn1.icon}</span>
+                                <span>{c.btn1.label}</span>
+                            </button>
+                        )}
                         <button
                             onClick={() => navigate('/customer/claims')}
                             className={`w-full md:w-auto flex items-center justify-center gap-2 px-8 py-3 rounded-lg font-bold transition-all ${c.btn2.btnColor || 'bg-primary hover:bg-red-600 text-white shadow-lg shadow-primary/20 hover:shadow-primary/40'}`}
@@ -223,6 +253,7 @@ export default function ClaimStatus() {
 
             {/* Bottom Gradient Line */}
             <div className={`fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent ${c.gradientBottom} to-transparent opacity-50`}></div>
+            <ErrorToast message={toastError} onClose={() => setToastError(null)} />
         </div>
     )
 }
