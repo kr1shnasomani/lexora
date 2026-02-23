@@ -37,13 +37,22 @@ def get_text_embedding(text: str, cfg: dict) -> Tuple[Optional[List[float]], Opt
             input_type="search_document"
         )
         
-        # Depending on cohere sdk version, response.embeddings is either list of lists or an object
-        if hasattr(response, "embeddings"):
-            embeddings = response.embeddings
-        elif hasattr(response.embeddings, "float"):
-            embeddings = response.embeddings.float
+        # Cohere SDK v5+: response.embeddings is an EmbedByTypeResponseEmbeddings object.
+        # The actual float vectors are under response.embeddings.float (a list of lists).
+        # Cohere SDK v4: response.embeddings is directly a list of lists.
+        # We must check the nested .float attribute FIRST — the parent object is always truthy.
+        raw_emb = getattr(response, "embeddings", None)
+        if raw_emb is None:
+            return None, "Empty response from Cohere (no embeddings attr)", int(time.time() * 1000) - start_ms
+
+        if hasattr(raw_emb, "float") and raw_emb.float:
+            # v5+ path — EmbedByTypeResponseEmbeddings
+            embeddings = raw_emb.float
+        elif isinstance(raw_emb, list):
+            # v4 path — list of lists
+            embeddings = raw_emb
         else:
-            embeddings = getattr(response, "embeddings", [])
+            embeddings = []
 
         if not embeddings or len(embeddings) == 0:
             return None, "Empty response from Cohere", int(time.time() * 1000) - start_ms
