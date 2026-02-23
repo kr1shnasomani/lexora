@@ -140,7 +140,7 @@ export default function PolicyDetailPage() {
                             ? [0, 1].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)
                             : (policy?.claims?.length > 0) ? (
                                 policy.claims.map(claim => (
-                                    <div key={claim.id} onClick={() => navigate(`/customer/claims/result?id=${claim.id}`)} className="p-4 rounded-xl border border-surface-border bg-surface-dark-customer hover:border-slate-500 transition-colors cursor-pointer flex justify-between items-center group">
+                                    <div key={claim.id} onClick={() => navigate(`/customer/claim-status?id=${claim.id}`)} className="p-4 rounded-xl border border-surface-border bg-surface-dark-customer hover:border-slate-500 transition-colors cursor-pointer flex justify-between items-center group">
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 rounded-full bg-surface-border flex items-center justify-center">
                                                 <span className="material-symbols-outlined text-slate-300 text-[20px]">receipt_long</span>
