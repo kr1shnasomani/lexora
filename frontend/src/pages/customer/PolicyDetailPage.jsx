@@ -5,6 +5,7 @@ import BottomNav from '../../components/customer/BottomNav'
 import { useFetch } from '../../hooks/useFetch'
 import { Skeleton } from '../../components/shared/Skeleton'
 import ErrorToast from '../../components/shared/ErrorToast'
+import { useAuth } from '../../contexts/AuthContext'
 
 const tabs = ['Overview', 'Coverage', 'Documents', 'Claims']
 
@@ -19,7 +20,14 @@ export default function PolicyDetailPage() {
     const policyId = params.get('id')
     const [toastError, setToastError] = useState(null)
 
-    const { data: policy, loading, error } = useFetch(policyId ? `/api/policies/${policyId}` : null)
+    // 1. Get Auth Context
+    const { user } = useAuth()
+
+    // 2. Fetch securely
+    const apiUrl = user?.email && policyId ? `/api/customer/policies/${policyId}?email=${encodeURIComponent(user.email)}` : null
+    const { data: policyResponse, loading, error } = useFetch(apiUrl)
+    const policy = policyResponse || null
+
     if (error && !toastError) setToastError(error)
 
     return (
@@ -66,12 +74,10 @@ export default function PolicyDetailPage() {
                         {loading
                             ? [0, 1, 2, 3].map(i => <div key={i} className="flex justify-between py-3 border-b border-surface-border"><Skeleton className="h-4 w-28" /><Skeleton className="h-4 w-32" /></div>)
                             : [
-                                { label: 'Policy Holder', value: 'Kumud Sharma' },
-                                { label: 'Policy Type', value: policy?.type },
+                                { label: 'Policy Holder', value: user?.name || user?.email },
+                                { label: 'Policy Type', value: policy?.type ? policy.type.toUpperCase() : 'N/A' },
                                 { label: 'Renewal Date', value: policy?.renewal_date },
-                                { label: 'Member Since', value: policy?.since ? `Since ${policy.since}` : undefined },
-                                ...(policy?.description ? [{ label: 'Description', value: policy.description }] : []),
-                                ...(policy?.beneficiaries?.map((b, i) => ({ label: `Beneficiary ${i + 1}`, value: b })) || []),
+                                { label: 'Member Since', value: policy?.since },
                             ].filter(f => f.value).map(f => (
                                 <div key={f.label} className="flex justify-between py-3 border-b border-surface-border last:border-0">
                                     <span className="text-sm text-slate-500">{f.label}</span>
@@ -103,23 +109,61 @@ export default function PolicyDetailPage() {
                     <div className="space-y-3">
                         {loading
                             ? [0, 1, 2].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)
-                            : (policy?.documents || []).map(doc => (
-                                <div key={doc} className="flex items-center justify-between p-4 rounded-xl border border-surface-border bg-surface-dark-customer">
-                                    <div className="flex items-center gap-3">
-                                        <span className="material-symbols-outlined text-primary text-[20px]">description</span>
-                                        <span className="text-sm text-white">{doc}</span>
+                            : (policy?.documents?.length > 0) ? (
+                                policy.documents.map(doc => (
+                                    <div key={doc.id} className="flex items-center justify-between p-4 rounded-xl border border-surface-border bg-surface-dark-customer hover:bg-surface-border/50 transition-colors cursor-pointer" onClick={() => window.open(doc.url, '_blank')}>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                                                <span className="material-symbols-outlined text-primary text-[20px]">description</span>
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-medium text-white line-clamp-1">{doc.name}</span>
+                                                <span className="text-xs text-slate-500">Related to: {doc.claim_number}</span>
+                                            </div>
+                                        </div>
+                                        <span className="material-symbols-outlined text-slate-500 text-[20px] hover:text-white transition-colors">download</span>
                                     </div>
-                                    <span className="material-symbols-outlined text-slate-500 text-[18px]">download</span>
+                                ))
+                            ) : (
+                                <div className="text-center py-10 bg-surface-dark-customer border border-surface-border rounded-xl">
+                                    <span className="material-symbols-outlined text-4xl text-slate-600 mb-2">folder_open</span>
+                                    <p className="text-slate-400 text-sm">No documents found for this policy.</p>
                                 </div>
-                            ))
+                            )
                         }
                     </div>
                 )}
 
                 {tab === 'Claims' && (
-                    <button onClick={() => navigate('/customer/claims')} className="w-full text-center py-8 text-primary hover:underline font-medium text-sm">
-                        View claim history →
-                    </button>
+                    <div className="space-y-3">
+                        {loading
+                            ? [0, 1].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)
+                            : (policy?.claims?.length > 0) ? (
+                                policy.claims.map(claim => (
+                                    <div key={claim.id} onClick={() => navigate(`/customer/claims/result?id=${claim.id}`)} className="p-4 rounded-xl border border-surface-border bg-surface-dark-customer hover:border-slate-500 transition-colors cursor-pointer flex justify-between items-center group">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-full bg-surface-border flex items-center justify-center">
+                                                <span className="material-symbols-outlined text-slate-300 text-[20px]">receipt_long</span>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-bold text-white group-hover:text-primary transition-colors">{claim.claim_number}</h3>
+                                                <p className="text-xs text-slate-500 mt-0.5">{claim.date} • <span className={`capitalize font-medium ${claim.status === 'approved' ? 'text-emerald-400' : claim.status === 'rejected' ? 'text-red-400' : 'text-amber-400'}`}>{claim.status.replace('_', ' ')}</span></p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-sm font-bold text-white mb-0.5">{claim.amount}</p>
+                                            <span className="material-symbols-outlined text-slate-500 text-[18px] group-hover:text-white transition-colors">chevron_right</span>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-center py-10 bg-surface-dark-customer border border-surface-border rounded-xl">
+                                    <span className="material-symbols-outlined text-4xl text-slate-600 mb-2">assignment</span>
+                                    <p className="text-slate-400 text-sm">No claims have been filed for this policy.</p>
+                                </div>
+                            )
+                        }
+                    </div>
                 )}
 
                 {/* Actions */}
