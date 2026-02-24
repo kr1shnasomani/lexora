@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # n8n
     n8n_webhook_url: str = "http://localhost:5678"
 
+    # LLMs
+    groq_api_key: str = ""
+
     class Config:
         env_file = str(_env_file)
         env_file_encoding = "utf-8"

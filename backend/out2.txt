@@ -1,0 +1,23 @@
+Traceback (most recent call last):
+  File "C:\Users\josna\OneDrive\Desktop\lexora\backend\test_chat.py", line 15, in run
+    res2 = await handle_chat_message(ChatMessageParams(session_id=res1.session_id, message="What are Meera's active policies?"))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\josna\OneDrive\Desktop\lexora\backend\routes\chat.py", line 208, in handle_chat_message
+    response_json = llm.generate(messages, tools=tools)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\josna\OneDrive\Desktop\lexora\backend\engines\llm_engine.py", line 38, in generate
+    response.raise_for_status()
+  File "C:\Users\josna\AppData\Local\Programs\Python\Python312\Lib\site-packages\requests\models.py", line 1021, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 429 Client Error: Too Many Requests for url: https://api.groq.com/openai/v1/chat/completions
+
+=== RES 1 ===
+session_id='0912ed96-c67b-4add-9ae4-559bf5826e16' message='Hello, Alex Chang! How can I assist you today? If you have any questions or need help with something specific, feel free to let me know.' tool_calls_executed=[]
+!!! EXECUTING TOOL: get_table_data WITH ARGS: {'filters': {'full_name': 'Meera'}, 'limit': 1, 'table_name': 'users'}
+!!! TOOL RESULT: [{'id': '11111111-2222-3333-4444-555555555555', 'email': 'meera@lexora.com', 'full_name': 'Meera', '
+!!! EXECUTING TOOL: get_table_data WITH ARGS: {'filters': {'status': 'active', 'user_id': '11111111-2222-3333-4444-555555555555'}, 'limit': 10, 'table_name': 'claims'}
+!!! TOOL RESULT: {'error': "{'message': 'operator does not exist: claim_status ~~* unknown', 'code': '42883', 'hint':
+!!! EXECUTING TOOL: get_table_data WITH ARGS: {'filters': {'status': 'active', 'user_id': '11111111-2222-3333-4444-555555555555'}, 'limit': 10, 'table_name': 'claims'}
+!!! TOOL RESULT: {'error': "{'message': 'operator does not exist: claim_status ~~* unknown', 'code': '42883', 'hint':
+GROQ API ERROR: {"error":{"message":"Rate limit reached for model `qwen/qwen3-32b` in organization `org_01k4zhwyfefhssajzeqvxdg9q7` service tier `on_demand` on tokens per minute (TPM): Limit 6000, Used 4771, Requested 3289. Please try again in 20.599999999s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing","type":"tokens","code":"rate_limit_exceeded"}}
+

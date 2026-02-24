@@ -17,6 +17,7 @@ from routes.auth import router as auth_router
 from routes.pdf_export import router as pdf_export_router
 from routes.config import router as config_router
 from routes.network import router as network_router
+from routes.chat import router as chat_router
 
 
 settings = get_settings()
@@ -48,6 +49,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(pdf_export_router, prefix="/api")
 app.include_router(config_router, prefix="/api")
 app.include_router(network_router, prefix="/api")
+app.include_router(chat_router, prefix="/api")
 
 
 @app.on_event("startup")
