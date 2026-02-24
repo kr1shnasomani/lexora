@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "C:\Users\josna\OneDrive\Desktop\lexora\backend\test_chat.py", line 10, in run
+    res1 = await handle_chat_message(ChatMessageParams(message="Hi, my name is Alex Chang."))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\josna\OneDrive\Desktop\lexora\backend\routes\chat.py", line 162, in handle_chat_message
+    response_json = llm.generate(messages, tools=tools)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\josna\OneDrive\Desktop\lexora\backend\engines\llm_engine.py", line 38, in generate
+    response.raise_for_status()
+  File "C:\Users\josna\AppData\Local\Programs\Python\Python312\Lib\site-packages\requests\models.py", line 1021, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 503 Server Error: Service Unavailable for url: https://api.groq.com/openai/v1/chat/completions
+GROQ API ERROR: {"error":{"message":"qwen/qwen3-32b is currently over capacity. Please try again and back off exponentially. Visit https://groqstatus.com to see if there is an active incident.","type":"internal_server_error"}}
+
