@@ -193,7 +193,7 @@ function ClaimDetailModal({ claimId, onClose, onRefresh }) {
                                     <div>
                                         <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider mb-1">Claimed Amount</p>
                                         <p className="text-emerald-400 font-mono font-bold text-lg leading-none">
-                                            {claim.claimed_amount ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(claim.claimed_amount) : '$0.00'}
+                                            {claim.claimed_amount ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(claim.claimed_amount) : '₹0.00'}
                                         </p>
                                     </div>
                                 </div>
@@ -405,7 +405,7 @@ export default function ClaimsQueuePage() {
                 claim_number: c.claim_number,
                 holder_name: c.claimant_name || 'Unspecified',
                 type: c.incident_type || 'Unknown',
-                amount: c.claimed_amount ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(c.claimed_amount) : '$0.00',
+                amount: c.claimed_amount ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(c.claimed_amount) : '₹0.00',
                 risk_score: c.fraud_score != null ? c.fraud_score : 0,
                 status: c.status,
                 final_decision: c.final_decision,

@@ -155,7 +155,7 @@ async def export_pdf(claim_id: str, email: str = Query(...)):
         
         current_y -= 15
         annual_limit = float(policy.get('annual_limit') or 0.0)
-        c.drawString(margin, current_y, f"Annual Limit: ${annual_limit:,.2f}")
+        c.drawString(margin, current_y, f"Annual Limit: ₹{annual_limit:,.2f}")
         
         current_y -= 30
         c.line(margin, current_y + 10, width - margin, current_y + 10)
@@ -193,19 +193,19 @@ async def export_pdf(claim_id: str, email: str = Query(...)):
         c.setFont("Helvetica", 10)
         claimed = float(claim.get("claimed_amount") or 0.0)
         c.drawString(margin, current_y, "Amount Claimed:")
-        c.drawString(margin + 150, current_y, f"${claimed:,.2f}")
+        c.drawString(margin + 150, current_y, f"₹{claimed:,.2f}")
         
         current_y -= 15
         deductible = float(financials.get("deductible") or 0.0)
         c.drawString(margin, current_y, "Deductible:")
-        c.drawString(margin + 150, current_y, f"${deductible:,.2f}")
+        c.drawString(margin + 150, current_y, f"₹{deductible:,.2f}")
         
         current_y -= 15
         approved = float(claim.get("approved_amount") or 0.0)
         c.setFont("Helvetica-Bold", 10)
         c.setFillColor(COLOR_APPROVED if approved > 0 else COLOR_REJECTED)
         c.drawString(margin, current_y, "Approved Amount:")
-        c.drawString(margin + 150, current_y, f"${approved:,.2f}")
+        c.drawString(margin + 150, current_y, f"₹{approved:,.2f}")
         
         current_y -= 30
         c.setFillColor(LEXORA_BLACK)

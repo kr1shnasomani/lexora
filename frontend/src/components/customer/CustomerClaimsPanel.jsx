@@ -46,8 +46,8 @@ export default function CustomerClaimsPanel({ isOpen, onClose }) {
                                 key={f}
                                 onClick={() => setFilter(f)}
                                 className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${filter === f
-                                        ? 'bg-primary text-white border-primary'
-                                        : 'bg-[#18181b] border-[#27272a] text-slate-400 hover:text-white hover:border-slate-500'
+                                    ? 'bg-primary text-white border-primary'
+                                    : 'bg-[#18181b] border-[#27272a] text-slate-400 hover:text-white hover:border-slate-500'
                                     }`}
                             >
                                 {f}
@@ -144,7 +144,7 @@ export default function CustomerClaimsPanel({ isOpen, onClose }) {
                                 <div className="flex items-center justify-between mt-2 pt-3 border-t border-[#27272a]/50">
                                     <div className="flex flex-col">
                                         <span className="text-[10px] text-slate-500 uppercase tracking-wider">Payout Amount</span>
-                                        <span className="text-sm font-bold text-white">$240.00</span>
+                                        <span className="text-sm font-bold text-white">₹240.00</span>
                                     </div>
                                     <button className="text-xs font-medium text-slate-300 hover:text-white flex items-center gap-1 transition-colors">
                                         <span className="material-symbols-outlined text-[14px]">download</span> Statement

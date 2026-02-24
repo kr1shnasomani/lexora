@@ -180,7 +180,7 @@ export default function ThreatFeedPage() {
 
     const STATS = [
         { label: 'Active Threats', value: String(activeCount), badge: `+${criticalCount} Critical`, badgeIcon: 'warning', badgeColor: 'text-primary bg-primary/10', borderColor: 'border-primary', icon: 'warning', iconBg: 'text-primary' },
-        { label: 'Risk Exposure', value: data?.kpis?.[0]?.value || '$—', badge: data?.kpis?.[0]?.delta || 'avg', badgeIcon: 'trending_up', badgeColor: 'text-emerald-500 bg-emerald-500/10', borderColor: 'border-emerald-500', icon: 'attach_money', iconBg: 'text-emerald-500' },
+        { label: 'Risk Exposure', value: data?.kpis?.[0]?.value || '₹—', badge: data?.kpis?.[0]?.delta || 'avg', badgeIcon: 'trending_up', badgeColor: 'text-emerald-500 bg-emerald-500/10', borderColor: 'border-emerald-500', icon: 'attach_money', iconBg: 'text-emerald-500' },
         { label: 'Auto-Resolution', value: data?.kpis?.[1]?.value || '0%', badge: data?.kpis?.[1]?.delta || 'growth', badgeIcon: 'trending_up', badgeColor: 'text-blue-400 bg-blue-500/10', borderColor: 'border-blue-500', icon: 'auto_fix_high', iconBg: 'text-blue-500' },
     ]
 

@@ -87,9 +87,9 @@ export default function RenewalPage() {
                     <div className="rounded-2xl border border-surface-border bg-surface-dark-customer p-6 space-y-4">
                         <h2 className="text-base font-semibold text-white mb-2">Optional Add-ons</h2>
                         {[
-                            { key: 'roadside', label: 'Roadside Assistance', desc: '24/7 towing and breakdown support', price: '+$8/mo' },
-                            { key: 'rental', label: 'Rental Reimbursement', desc: 'Up to $50/day while car is in repair', price: '+$12/mo' },
-                            { key: 'glass', label: 'Glass Coverage', desc: 'Deductible-free windscreen replacement', price: '+$5/mo' },
+                            { key: 'roadside', label: 'Roadside Assistance', desc: '24/7 towing and breakdown support', price: '+₹8/mo' },
+                            { key: 'rental', label: 'Rental Reimbursement', desc: 'Up to $50/day while car is in repair', price: '+₹12/mo' },
+                            { key: 'glass', label: 'Glass Coverage', desc: 'Deductible-free windscreen replacement', price: '+₹5/mo' },
                         ].map(a => (
                             <div key={a.key} className="flex items-center justify-between py-3 border-b border-surface-border last:border-0">
                                 <div>
@@ -111,9 +111,9 @@ export default function RenewalPage() {
                         <div className="rounded-2xl border border-surface-border bg-surface-dark-customer p-6">
                             <h2 className="text-base font-semibold text-white mb-4">Payment Summary</h2>
                             <div className="space-y-2">
-                                <div className="flex justify-between text-sm"><span className="text-slate-500">Base Premium</span><span className="text-white">${base}/mo</span></div>
-                                {extra > 0 && <div className="flex justify-between text-sm"><span className="text-slate-500">Add-ons</span><span className="text-white">+${extra}/mo</span></div>}
-                                <div className="flex justify-between text-sm pt-2 border-t border-surface-border font-bold"><span className="text-white">Total</span><span className="text-primary text-lg">${base + extra}/mo</span></div>
+                                <div className="flex justify-between text-sm"><span className="text-slate-500">Base Premium</span><span className="text-white">₹{base}/mo</span></div>
+                                {extra > 0 && <div className="flex justify-between text-sm"><span className="text-slate-500">Add-ons</span><span className="text-white">+₹{extra}/mo</span></div>}
+                                <div className="flex justify-between text-sm pt-2 border-t border-surface-border font-bold"><span className="text-white">Total</span><span className="text-primary text-lg">₹{base + extra}/mo</span></div>
                             </div>
                         </div>
                         <div className="flex items-center gap-4 p-4 rounded-2xl border border-surface-border bg-surface-dark-customer">
@@ -137,7 +137,7 @@ export default function RenewalPage() {
                             <h2 className="text-xl font-bold text-white">All Set!</h2>
                             <p className="text-slate-400 text-sm mt-2 leading-relaxed">
                                 Your {policy?.name || 'policy'} has been renewed successfully.
-                                New premium: <strong className="text-white">${base + extra}/mo</strong>
+                                New premium: <strong className="text-white">₹{base + extra}/mo</strong>
                             </p>
                         </div>
                     </div>
