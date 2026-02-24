@@ -18,7 +18,7 @@ from routes.pdf_export import router as pdf_export_router
 from routes.config import router as config_router
 from routes.network import router as network_router
 from routes.chat import router as chat_router
-
+from routes.analytics import router as analytics_router
 
 settings = get_settings()
 
@@ -50,7 +50,7 @@ app.include_router(pdf_export_router, prefix="/api")
 app.include_router(config_router, prefix="/api")
 app.include_router(network_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
-
+app.include_router(analytics_router, prefix="/api")
 
 @app.on_event("startup")
 async def startup_event():
