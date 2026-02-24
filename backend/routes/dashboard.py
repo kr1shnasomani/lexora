@@ -27,14 +27,29 @@ def time_ago(dt_str):
     except Exception:
         return dt_str.split("T")[0]
 
-def determine_threat_level(stage, event_type):
-    if event_type == "failed":
+def determine_threat_level(stage, event_type, score):
+    if score >= 80 or event_type == "failed":
         return "Critical"
-    if event_type == "warned" or stage in ["fraud_investigation", "manual_review"]:
-        return "Warning"
-    if stage == "audit":
-        return "System"
+    if score >= 60 or stage in ["fraud_investigation"]:
+        return "High"
+    if score >= 30 or stage in ["manual_review"] or event_type == "warned":
+        return "Medium"
     return "Low"
+
+def determine_icon(stage, event_type):
+    if event_type == "failed":
+        return "error"
+    if stage == "audit":
+        return "policy"
+    if stage == "fraud_investigation":
+        return "policy"
+    if "graph" in stage.lower() or "tier3" in stage.lower():
+        return "share"
+    if "vector" in stage.lower() or "tier2" in stage.lower():
+        return "difference"
+    if "rule" in stage.lower() or "tier1" in stage.lower():
+        return "gavel"
+    return "warning"
 
 def format_currency(amount):
     try:
@@ -49,14 +64,14 @@ async def get_dashboard_summary():
     db = get_supabase()
     
     # 1. Fetch KPI basic numbers
-    claims_res = db.table("claims").select("id, status, fraud_score, claimed_amount").execute()
+    claims_res = db.table("claims").select("id, status, fraud_score, claimed_amount, final_decision").execute()
     claims = claims_res.data or []
     
     total_claims = len(claims)
-    auto_resolved = sum(1 for c in claims if c.get("status") in ("approved", "auto_approve", "auto_reject", "denied"))
-    flagged = sum(1 for c in claims if c.get("status") in ("deciding", "under_review", "fraud_investigation"))
+    auto_resolved = sum(1 for c in claims if c.get("final_decision") in ("auto_approve", "auto_reject"))
+    flagged = sum(1 for c in claims if c.get("status") in ("deciding", "under_review", "fraud_investigation") or c.get("final_decision") == "manual_review")
     
-    exposure = sum(float(c.get("claimed_amount") or 0) for c in claims if c.get("status") in ("deciding", "under_review", "fraud_investigation"))
+    exposure = sum(float(c.get("claimed_amount") or 0) for c in claims if c.get("status") in ("deciding", "under_review", "fraud_investigation") or c.get("final_decision") == "manual_review")
     
     auto_res_rate = f"{(auto_resolved / total_claims * 100):.1f}%" if total_claims > 0 else "0%"
     
@@ -126,6 +141,8 @@ async def get_dashboard_summary():
         # Maximize information by dumping payload keys
         payload_desc = ""
         payload_raw = e.get("payload")
+        score = 0  # Initialize score
+        level = None
         if payload_raw:
             try:
                 p = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
@@ -133,38 +150,76 @@ async def get_dashboard_summary():
                     # Format something readable
                     parts = []
                     if "fraud_score" in p:
-                        parts.append(f"Risk: {p['fraud_score']*100:.1f}%")
-                    if "recommended_action" in p:
-                        parts.append(f"Action: {p['recommended_action'].upper()}")
-                    if "status" in p:
-                        parts.append(f"Status: {p['status']}")
-                    if "rules_failed" in p and p["rules_failed"]:
-                        parts.append(f"Failed: {', '.join(p['rules_failed'])}")
-                    
-                    if parts:
-                        payload_desc = " | ".join(parts)
-                    else:
-                        payload_desc = json.dumps(p)
+                        score = round(p['fraud_score'] * 100)
+                        parts.append(f"Risk: {score:.1f}%")
+                    elif "score" in p: # Fallback to 'score' if 'fraud_score' not present
+                        score = round(p['score'] * 100)
+                        parts.append(f"Score: {score:.1f}%")
+                        
+                    # Explicit Threat Level Assignment Mapping
+                    if p.get("status") == "REJECT" or p.get("status") == "DENY" or p.get("decision") == "auto_reject":
+                        level = "Critical"
+                    elif p.get("status") == "REVIEW" or p.get("decision") == "manual_review":
+                        level = "High"
+                    elif p.get("decision") == "auto_approve" or p.get("status") == "APPROVE":
+                        level = "Low"
+                        
+                    for k, v in list(p.items())[:6]:  # Show a few top-level keys
+                        if k not in ("score", "fraud_score", "diagnostics", "timing_ms", "fallbacks"):
+                            short_v = str(v)
+                            if len(short_v) > 60:
+                                short_v = short_v[:57] + "..."
+                            parts.append(f"{k}: {short_v}")
+                    payload_desc = " | ".join(parts)
             except:
                 payload_desc = str(payload_raw)
                 
         if not payload_desc:
             payload_desc = f"Processed {stage} layer."
             
-        # Ensure it doesn't overflow incredibly
-        if len(payload_desc) > 150:
-            payload_desc = payload_desc[:147] + "..."
+        if len(payload_desc) > 200:
+            payload_desc = payload_desc[:197] + "..."
+            
+        if not level:
+            level = determine_threat_level(stage, evt, score)
             
         threat_alerts.append({
             "id": e.get("id"),
-            "level": determine_threat_level(stage, evt),
-            "title": f"[{e.get('claim_id')[:8]}] {stage.upper().replace('_', ' ')}: {evt.upper()}",
+            "level": level, # Assign parsed level or determined level
+            "score": score, # Include the extracted score
+            "icon": determine_icon(stage, evt), # Get icon based on stage/event
+            "title": f"[{str(e.get('claim_id'))[:8]}] {stage.upper().replace('_', ' ')}", # Simplified title
             "description": payload_desc,
             "detected": time_ago(e.get("created_at"))
         })
         
+    # 4. Fetch Tier 3 Graph Excerpt from recent claims
+    graph_excerpt = {"nodes": [], "edges": []}
+    
+    # Get a recent claim with a tier3 analysis
+    # We look directly in the claims table for parsed fraud_analysis
+    recent_claims = (
+        db.table("claims")
+        .select("id, fraud_analysis")
+        .order("created_at", desc=True)
+        .limit(50)
+        .execute()
+    )
+    
+    for c in (recent_claims.data or []):
+        fa = c.get("fraud_analysis")
+        if fa and isinstance(fa, dict) and "tier3" in fa:
+            t3 = fa["tier3"]
+            if t3 and isinstance(t3, dict) and "graph_excerpt" in t3:
+                excerpt = t3["graph_excerpt"]
+                if excerpt and isinstance(excerpt, dict):
+                    if excerpt.get("nodes") and excerpt.get("edges"):
+                        graph_excerpt = excerpt
+                        break
+    
     return {
         "kpis": kpis,
         "priority_queue": priority_queue,
-        "threat_alerts": threat_alerts
+        "threat_alerts": threat_alerts,
+        "graph_excerpt": graph_excerpt
     }

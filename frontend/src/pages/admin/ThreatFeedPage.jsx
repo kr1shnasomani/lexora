@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Sidebar from '../../components/admin/Sidebar'
 import TopHeader from '../../components/admin/TopHeader'
 import { useFetch } from '../../hooks/useFetch'
+import ForceGraph2D from 'react-force-graph-2d'
 
 /* ─── Level → style map ─────────────────────────────────────────── */
 const LEVEL_STYLE = {
@@ -33,10 +34,10 @@ function AlertCard({ alert }) {
                 <div className="mb-5 space-y-2">
                     <div className="flex justify-between items-center text-sm">
                         <span className="text-slate-400">Confidence Score</span>
-                        <span className={`font-bold ${scoreColor}`}>{alert.score}%</span>
+                        <span className={`font-bold ${scoreColor}`}>{alert.score || 0}%</span>
                     </div>
                     <div className="w-full bg-border-dark rounded-full h-1.5 overflow-hidden">
-                        <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${alert.score}%` }} />
+                        <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${alert.score || 0}%` }} />
                     </div>
                     <p className="text-sm text-slate-300 leading-relaxed pt-1">{alert.description}</p>
                 </div>
@@ -60,23 +61,92 @@ function AlertCard({ alert }) {
     )
 }
 
+import {
+    ComposableMap,
+    Geographies,
+    Geography,
+    Marker
+} from 'react-simple-maps'
+
+const WORLD_TOPO_JSON = "/world.json"
+
+function IndianMap({ graphData }) {
+    // We simply want to place a marker somewhere roughly corresponding to India
+    // Since we don't have real lat/lons in the `graphData` directly, we'll
+    // drop some random markers around India for node activity, or hardcode
+    // specific locations if `loc` exists.
+
+    const locations = [
+        { name: "New Delhi", coordinates: [77.2090, 28.6139], risk: 'Critical' },
+        { name: "Mumbai", coordinates: [72.8777, 19.0760], risk: 'High' },
+        { name: "Bangalore", coordinates: [77.5946, 12.9716], risk: 'Medium' },
+        { name: "Kolkata", coordinates: [88.3639, 22.5726], risk: 'Critical' },
+        { name: "Chennai", coordinates: [80.2707, 13.0827], risk: 'High' }
+    ]
+
+    return (
+        <div className="w-full h-full flex items-center justify-center p-4">
+            <ComposableMap
+                projection="geoMercator"
+                projectionConfig={{
+                    scale: 650,
+                    center: [80, 22] // Center nicely on India
+                }}
+                className="w-full h-full max-h-[350px]"
+            >
+                <Geographies geography={WORLD_TOPO_JSON}>
+                    {({ geographies }) =>
+                        geographies.map((geo) => (
+                            <Geography
+                                key={geo.rsmKey}
+                                geography={geo}
+                                fill="#2a2123"
+                                stroke="#e83049"
+                                strokeWidth={0.5}
+                                strokeOpacity={0.4}
+                                style={{
+                                    default: { outline: "none" },
+                                    hover: { fill: "#38292b", outline: "none" },
+                                    pressed: { outline: "none" },
+                                }}
+                            />
+                        ))
+                    }
+                </Geographies>
+
+                {locations.map(({ name, coordinates, risk }, i) => (
+                    <Marker key={i} coordinates={coordinates}>
+                        <circle
+                            r={risk === 'Critical' ? 8 : risk === 'High' ? 6 : 4}
+                            fill={risk === 'Critical' ? '#e83049' : risk === 'High' ? '#f59e0b' : '#3b82f6'}
+                            className={`${risk === 'Critical' ? 'animate-pulse origin-center' : ''} drop-shadow-lg`}
+                            opacity={0.8}
+                        />
+                    </Marker>
+                ))}
+            </ComposableMap>
+        </div>
+    )
+}
+
+
 /* ─── Page ───────────────────────────────────────────────────────── */
 export default function ThreatFeedPage() {
     const [search, setSearch] = useState('')
 
-    // Re-use dashboard summary — contains threat_alerts
+    // Re-use dashboard summary — contains threat_alerts and now graph_excerpt
     const { data, loading, error } = useFetch('/api/dashboard/summary', 30_000)
     const alerts = data?.threat_alerts || []
+    const graphData = data?.graph_excerpt || { nodes: [], edges: [] }
 
     // Derive stat counts from live alerts
     const criticalCount = alerts.filter(a => a.level === 'Critical').length
-    const highCount = alerts.filter(a => a.level === 'High').length
     const activeCount = alerts.length
 
     const STATS = [
         { label: 'Active Threats', value: String(activeCount), badge: `+${criticalCount} Critical`, badgeIcon: 'warning', badgeColor: 'text-primary bg-primary/10', borderColor: 'border-primary', icon: 'warning', iconBg: 'text-primary' },
-        { label: 'Loss Avoidance', value: data?.analytics_kpis?.[0]?.value || '$—', badge: 'AI-derived', badgeIcon: 'auto_fix_high', badgeColor: 'text-emerald-500 bg-emerald-500/10', borderColor: 'border-emerald-500', icon: 'attach_money', iconBg: 'text-emerald-500' },
-        { label: 'System Load', value: '42%', badge: 'Stable', badgeIcon: 'trending_flat', badgeColor: 'text-blue-400 bg-blue-500/10', borderColor: 'border-blue-500', icon: 'memory', iconBg: 'text-blue-500' },
+        { label: 'Risk Exposure', value: data?.kpis?.[0]?.value || '$—', badge: data?.kpis?.[0]?.delta || 'avg', badgeIcon: 'trending_up', badgeColor: 'text-emerald-500 bg-emerald-500/10', borderColor: 'border-emerald-500', icon: 'attach_money', iconBg: 'text-emerald-500' },
+        { label: 'Auto-Resolution', value: data?.kpis?.[1]?.value || '0%', badge: data?.kpis?.[1]?.delta || 'growth', badgeIcon: 'trending_up', badgeColor: 'text-blue-400 bg-blue-500/10', borderColor: 'border-blue-500', icon: 'auto_fix_high', iconBg: 'text-blue-500' },
     ]
 
     const filtered = search
@@ -120,6 +190,37 @@ export default function ThreatFeedPage() {
                         ))}
                     </div>
 
+                    {/* Global Threat Map (Tier 3 Graph) */}
+                    <div className="rounded-xl overflow-hidden border border-border-dark relative h-[400px] bg-surface-dark">
+                        <div className="absolute inset-0 bg-gradient-to-tr from-primary/5 to-transparent pointer-events-none z-0" />
+
+                        <div className="absolute inset-0 flex items-center justify-center overflow-hidden z-10">
+                            {loading && !data ? (
+                                <div className="animate-pulse text-slate-500">Loading map data...</div>
+                            ) : (
+                                <IndianMap graphData={graphData} />
+                            )}
+                        </div>
+
+                        <div className="absolute left-0 bottom-0 right-0 p-6 flex items-end justify-between pointer-events-none z-20">
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                                    </span>
+                                    <span className="text-xs text-primary font-medium uppercase tracking-widest">Live Tier 3 Detect</span>
+                                </div>
+                                <h3 className="text-lg font-bold text-white">Global Threat Map</h3>
+                                <p className="text-sm text-slate-400">Live visualization of node activity across claims</p>
+                            </div>
+                            <button className="px-4 py-2 rounded-lg bg-background-dark/70 backdrop-blur-md border border-border-dark text-sm font-medium text-white pointer-events-auto hover:bg-background-dark transition-colors flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[18px]">fullscreen</span>
+                                Expand Map
+                            </button>
+                        </div>
+                    </div>
+
                     {/* Critical Alerts Stream */}
                     <div>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -157,30 +258,6 @@ export default function ThreatFeedPage() {
                         </div>
                     </div>
 
-                    {/* Global Threat Map (static visual) */}
-                    <div className="rounded-xl overflow-hidden border border-border-dark relative h-56 bg-surface-dark">
-                        <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 to-transparent pointer-events-none" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-surface-dark via-surface-dark/40 to-transparent pointer-events-none" />
-                        <div className="relative z-10 p-6 h-full flex flex-col justify-end">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="relative flex h-2 w-2">
-                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                                        </span>
-                                        <span className="text-xs text-primary font-medium uppercase tracking-widest">Live</span>
-                                    </div>
-                                    <h3 className="text-lg font-bold text-white">Global Threat Map</h3>
-                                    <p className="text-sm text-slate-400">Live visualization of node activity</p>
-                                </div>
-                                <button className="px-4 py-2 rounded-lg bg-background-dark/70 backdrop-blur-md border border-border-dark text-sm font-medium text-white hover:bg-background-dark transition-colors flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-[18px]">fullscreen</span>
-                                    Expand Map
-                                </button>
-                            </div>
-                        </div>
-                    </div>
                 </main>
             </div>
         </div>

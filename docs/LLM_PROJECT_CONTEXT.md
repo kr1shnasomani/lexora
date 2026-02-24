@@ -14973,7 +14973,7 @@ const Sidebar = () => {
                 </div>
                 <Link to="/admin/dashboard" className={linkClass('/admin/dashboard')}>
                     <span className="material-symbols-outlined">dashboard</span>
-                    <span className="font-medium hidden lg:block">Sentinel Dashboard</span>
+                    <span className="font-medium hidden lg:block">Dashboard</span>
                 </Link>
                 <Link to="/admin/analytics" className={linkClass('/admin/analytics')}>
                     <span className="material-symbols-outlined">pie_chart</span>
