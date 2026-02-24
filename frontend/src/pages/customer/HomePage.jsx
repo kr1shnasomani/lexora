@@ -6,6 +6,7 @@ import { SkeletonPolicyCard, Skeleton } from '../../components/shared/Skeleton'
 import ErrorToast from '../../components/shared/ErrorToast'
 import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import CustomerClaimsPanel from '../../components/customer/CustomerClaimsPanel'
 
 const policyIcon = (type) => {
     const map = { health: 'cardiology', auto: 'directions_car', travel: 'flight', pet: 'pets', life: 'favorite' }
@@ -21,6 +22,7 @@ export default function HomePage() {
     const navigate = useNavigate()
     const { user } = useAuth()
     const [toastError, setToastError] = useState(null)
+    const [isClaimsPanelOpen, setIsClaimsPanelOpen] = useState(false)
 
     // The backend uses ?email= for customer lookups natively
     const policiesUrl = user?.email ? `/api/customer/policies?email=${encodeURIComponent(user.email)}&status=active` : null
@@ -42,16 +44,24 @@ export default function HomePage() {
             <Header />
             <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8 pb-32">
 
-                {/* Welcome */}
                 <section className="mb-10">
-                    <div className="flex flex-col gap-2">
-                        {!user
-                            ? <><Skeleton className="h-10 w-80" /><Skeleton className="h-5 w-64 mt-2" /></>
-                            : <>
-                                <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight">{greeting()}, {user?.name?.split(' ')[0] || 'there'}</h2>
-                                <p className="text-slate-400 text-lg">Intelligence Core active. Your coverage is optimized.</p>
-                            </>
-                        }
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div className="flex flex-col gap-2">
+                            {!user
+                                ? <><Skeleton className="h-10 w-80" /><Skeleton className="h-5 w-64 mt-2" /></>
+                                : <>
+                                    <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight">{greeting()}, {user?.name?.split(' ')[0] || 'there'}</h2>
+                                    <p className="text-slate-400 text-lg">Intelligence Core active. Your coverage is optimized.</p>
+                                </>
+                            }
+                        </div>
+                        <button
+                            onClick={() => setIsClaimsPanelOpen(true)}
+                            className="bg-primary hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-primary/20 shrink-0"
+                        >
+                            <span className="material-symbols-outlined">receipt_long</span>
+                            Quick Track Claims
+                        </button>
                     </div>
                 </section>
 
@@ -159,6 +169,7 @@ export default function HomePage() {
                     </div>
                 </div>
             </main>
+            <CustomerClaimsPanel isOpen={isClaimsPanelOpen} onClose={() => setIsClaimsPanelOpen(false)} />
             <BottomNav />
             <ErrorToast message={toastError} onClose={() => setToastError(null)} />
         </div>

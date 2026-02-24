@@ -16,6 +16,7 @@ import AnalyticsPage from './pages/admin/AnalyticsPage'
 import NetworkGraphPage from './pages/admin/NetworkGraphPage'
 import ConfigPage from './pages/admin/ConfigPage'
 import AdminGlobalOverlay from './components/admin/AdminGlobalOverlay'
+import CustomerGlobalOverlay from './components/customer/CustomerGlobalOverlay'
 
 // Customer pages
 import HomePage from './pages/customer/HomePage'
@@ -56,6 +57,7 @@ export default function App() {
             <BrowserRouter>
                 <ForceRedirect />
                 <AdminGlobalOverlay />
+                <CustomerGlobalOverlay />
                 <Routes>
                     {/* ─── Landing ─────────────────────────────────── */}
                     <Route path="/" element={<ModeSelectionPage />} />
