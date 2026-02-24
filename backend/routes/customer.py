@@ -58,7 +58,7 @@ async def get_customer_policies(email: str = Query(...), status: str = Query(Non
                 "policy_number": p.get("policy_number"),
                 "type": ptype,
                 "status": "active" if p.get("is_active") else "expired",
-                "coverage_amount": f"${p.get('annual_limit'):,.0f}" if p.get('annual_limit') else "Unknown",
+                "coverage_amount": f"₹{p.get('annual_limit'):,.0f}" if p.get('annual_limit') else "Unknown",
                 "renewal_date": p.get("policy_end_date"),
                 "extra_stats": extra_stats
             }
@@ -157,7 +157,7 @@ async def get_policy_detail(policy_id: str, email: str = Query(...)):
                 "id": doc["id"],
                 "name": doc.get("file_name", "Unnamed Document"),
                 "claim_number": claim_num,
-                "url": f"/api/claims/download/{doc['id']}" # Mock URL, normally points to real storage
+                "url": f"/api/claims/{doc['claim_id']}/documents/{doc['id']}/download" # Points to the real download route
             })
 
     # 5. Bring it all together in the expected format for PolicyDetailPage.jsx

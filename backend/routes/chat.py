@@ -112,7 +112,7 @@ def execute_customer_tool(function_name: str, arguments: dict, user_email: str):
                 "id": p.get("id"),
                 "policy_number": p.get("policy_number"),
                 "policy_type": p.get("policy_type"),
-                "coverage_amount": f"${p.get('annual_limit'):,.0f}" if p.get('annual_limit') else "Unknown",
+                "coverage_amount": f"₹{p.get('annual_limit'):,.0f}" if p.get('annual_limit') else "Unknown",
                 "status": "active" if p.get("is_active") else "expired"
             })
         return mapped_policies

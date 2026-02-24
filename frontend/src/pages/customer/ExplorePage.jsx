@@ -3,10 +3,10 @@ import Header from '../../components/customer/Header'
 import BottomNav from '../../components/customer/BottomNav'
 
 const plans = [
-    { title: 'Critical Illness Rider', desc: 'Lump-sum payout on diagnosis of 36 critical illnesses including cancer, stroke, and heart attack.', price: '$44/mo', icon: 'medical_services', color: 'text-red-400 bg-red-400/10', popular: false },
-    { title: 'Accidental Death & Disability', desc: 'Additional coverage for accidental disability or death — up to $500,000 benefit.', price: '$31/mo', icon: 'personal_injury', color: 'text-orange-400 bg-orange-400/10', popular: true },
-    { title: 'Travel Insurance Bundle', desc: 'International medical, trip cancellation, and lost luggage coverage for frequent travelers.', price: '$18/mo', icon: 'flight', color: 'text-blue-400 bg-blue-400/10', popular: false },
-    { title: 'Pet Insurance', desc: 'Comprehensive vet coverage for accidents, illnesses, and routine checkups for your pet.', price: '$22/mo', icon: 'pets', color: 'text-purple-400 bg-purple-400/10', popular: false },
+    { title: 'Critical Illness Rider', desc: 'Lump-sum payout on diagnosis of 36 critical illnesses including cancer, stroke, and heart attack.', price: '₹44/mo', icon: 'medical_services', color: 'text-red-400 bg-red-400/10', popular: false },
+    { title: 'Accidental Death & Disability', desc: 'Additional coverage for accidental disability or death — up to ₹500,000 benefit.', price: '₹31/mo', icon: 'personal_injury', color: 'text-orange-400 bg-orange-400/10', popular: true },
+    { title: 'Travel Insurance Bundle', desc: 'International medical, trip cancellation, and lost luggage coverage for frequent travelers.', price: '₹18/mo', icon: 'flight', color: 'text-blue-400 bg-blue-400/10', popular: false },
+    { title: 'Pet Insurance', desc: 'Comprehensive vet coverage for accidents, illnesses, and routine checkups for your pet.', price: '₹22/mo', icon: 'pets', color: 'text-purple-400 bg-purple-400/10', popular: false },
 ]
 
 export default function ExplorePage() {
