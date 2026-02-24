@@ -14,6 +14,12 @@ class ChatMessageParams(BaseModel):
     message: str
     ui_context: Optional[Dict[str, Any]] = None
 
+class CustomerChatMessageParams(BaseModel):
+    session_id: Optional[str] = None
+    message: str
+    email: str # Used to securely scope data access
+    ui_context: Optional[Dict[str, Any]] = None
+
 class CreateSessionParams(BaseModel):
     title: Optional[str] = "New Session"
     user_id: str # Ideally from auth token
@@ -72,6 +78,46 @@ def execute_internal_tool(function_name: str, arguments: dict):
             return {"error": str(e)}
 
     return {"error": f"Tool {function_name} not found"}
+
+def execute_customer_tool(function_name: str, arguments: dict, user_email: str):
+    """
+    Executes customer-facing tools, strictly scoping by user_email.
+    """
+    db = get_supabase()
+    
+    if function_name == "get_my_claims":
+        user_res = db.table("users").select("id, full_name").eq("email", user_email).limit(1).execute()
+        if not user_res.data: return {"error": "User not found"}
+            
+        full_name = user_res.data[0]["full_name"]
+        policies_res = db.table("policies").select("id").eq("holder_name", full_name).execute()
+        
+        if not policies_res.data: return []
+            
+        policy_ids = [p["id"] for p in policies_res.data]
+        claims_res = db.table("claims").select("id, claim_number, status, claimed_amount, created_at").in_("policy_id", policy_ids).execute()
+        return claims_res.data
+        
+    if function_name == "get_my_policies":
+        user_res = db.table("users").select("id, full_name").eq("email", user_email).limit(1).execute()
+        if not user_res.data: return {"error": "User not found"}
+            
+        full_name = user_res.data[0]["full_name"]
+        policies_res = db.table("policies").select("id, policy_number, policy_type, annual_limit, is_active").eq("holder_name", full_name).execute()
+        
+        # Transform the result to match what the LLM expects, or just map the dict
+        mapped_policies = []
+        for p in (policies_res.data or []):
+            mapped_policies.append({
+                "id": p.get("id"),
+                "policy_number": p.get("policy_number"),
+                "policy_type": p.get("policy_type"),
+                "coverage_amount": f"${p.get('annual_limit'):,.0f}" if p.get('annual_limit') else "Unknown",
+                "status": "active" if p.get("is_active") else "expired"
+            })
+        return mapped_policies
+
+    return {"error": f"Tool {function_name} not found or unauthorized"}
 
 # --- Endpoints ---
 @router.post("/chat/message", response_model=ChatResponse)
@@ -254,3 +300,125 @@ async def get_session_messages(session_id: str):
     db = get_supabase()
     res = db.table("chat_messages").select("id, role, content, created_at").eq("session_id", session_id).order("created_at").execute()
     return res.data
+
+@router.post("/chat/customer/message", response_model=ChatResponse)
+async def handle_customer_chat_message(params: CustomerChatMessageParams):
+    db = get_supabase()
+    session_id = params.session_id
+    
+    if not session_id:
+        new_sess = db.table("chat_sessions").insert({"title": params.message[:30] + "..."}).execute()
+        if not new_sess.data:
+            raise HTTPException(status_code=500, detail="Failed to create session")
+        session_id = new_sess.data[0]["id"]
+        
+    db.table("chat_messages").insert({
+        "session_id": session_id,
+        "role": "user",
+        "content": params.message
+    }).execute()
+    
+    msg_history_res = db.table("chat_messages").select("role, content").eq("session_id", session_id).order("created_at").execute()
+    
+    messages = [
+        {"role": "system", "content": f"You are Lexora Assistant, a helpful AI customer support agent for '{params.email}'. You can securely check their claims and policies.\n\nCRITICAL RULES:\n1. ONLY answer questions regarding the user's own claims and policies.\n2. Do NOT disclose internal fraud scores or system algorithms.\n3. Be helpful, polite, and conversational.\n4. Call tools to fetch their data if they ask for details on their claims or coverages."}
+    ]
+    
+    if params.ui_context:
+        messages.append({
+            "role": "system", 
+            "content": f"The customer's current UI context is: {params.ui_context}."
+        })
+        
+    messages.extend(msg_history_res.data or [])
+
+    llm = GroqEngine()
+    
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_my_claims",
+                "description": "Fetch all claims filed by the current customer.",
+                "parameters": {"type": "object", "properties": {}}
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_my_policies",
+                "description": "Fetch all policies owned by the current customer.",
+                "parameters": {"type": "object", "properties": {}}
+            }
+        }
+    ]
+
+    try:
+        response_json = llm.generate(messages, tools=tools)
+        tool_calls_executed = []
+        
+        max_loops = 5
+        loop_count = 0
+        final_answer = ""
+        
+        while loop_count < max_loops:
+            loop_count += 1
+            response_message = response_json["choices"][0]["message"]
+            content = response_message.get("content", "")
+            
+            import re
+            import json
+            import uuid
+            if not response_message.get("tool_calls") and "<tool_call>" in content:
+                tool_call_match = re.search(r'<tool_call>\s*({.*?})\s*</tool_call>', content, re.DOTALL)
+                if tool_call_match:
+                    try:
+                        parsed_tool = json.loads(tool_call_match.group(1).strip())
+                        response_message["tool_calls"] = [{
+                            "id": f"call_{uuid.uuid4().hex[:8]}",
+                            "type": "function",
+                            "function": {
+                                "name": parsed_tool["name"],
+                                "arguments": json.dumps(parsed_tool.get("arguments", {}))
+                            }
+                        }]
+                        response_message["content"] = content.replace(tool_call_match.group(0), "").strip()
+                    except: pass
+
+            if response_message.get("tool_calls"):
+                messages.append(response_message)
+                for tool_call in response_message["tool_calls"]:
+                    func_name = tool_call["function"]["name"]
+                    args = json.loads(tool_call["function"]["arguments"])
+                    
+                    tool_result = execute_customer_tool(func_name, args, params.email)
+                    tool_calls_executed.append(func_name)
+                    
+                    messages.append({
+                        "tool_call_id": tool_call["id"],
+                        "role": "tool",
+                        "name": func_name,
+                        "content": json.dumps(tool_result)
+                    })
+                response_json = llm.generate(messages, tools=tools)
+            else:
+                final_answer = response_message.get("content", "I am currently unable to process that.")
+                break
+
+        if final_answer:
+            final_answer = re.sub(r'<think>.*?</think>', '', final_answer, flags=re.DOTALL).strip()
+    except Exception as e:
+        final_answer = f"I encountered an error connecting to Lexora Support. Please try again. (Details: {str(e)})"
+        tool_calls_executed = []
+
+    db.table("chat_messages").insert({
+        "session_id": session_id,
+        "role": "assistant",
+        "content": final_answer
+    }).execute()
+
+    return ChatResponse(
+        session_id=session_id,
+        message=final_answer,
+        tool_calls_executed=tool_calls_executed
+    )
