@@ -70,12 +70,27 @@ const FALLBACK_AUDIT = [
 ]
 
 /* ─── Map backend audit_events → layer accordion items ───────────── */
-function eventToLayer(event) {
+function eventToLayer(event, stageEvents) {
     const meta = event._meta || { key: event.stage, icon: 'circle', title: event.stage, sub: event.event_type }
     const isPending = event.event_type === 'pending'
 
     const durationStr = event.duration_ms ? `${event.duration_ms}ms` : '—'
-    const failed = event.event_type === 'failed'
+
+    // Check if any event in this stage failed
+    const hasFailedNode = stageEvents && stageEvents.some(e => {
+        if (e.event_type === 'failed') return true;
+        let p = e.payload;
+        if (typeof p === 'string') {
+            try { p = JSON.parse(p); } catch (err) { }
+        }
+        if (p && typeof p === 'object') {
+            if (p.status === 'REJECT' || p.status === 'DENY') return true;
+            if (p.final_decision === 'auto_reject') return true;
+        }
+        return false;
+    });
+
+    const failed = event.event_type === 'failed' || hasFailedNode
     const warned = event.event_type === 'warned'
     const logged = event.stage === 'audit'
 
@@ -722,14 +737,13 @@ export default function AuditLogPage() {
                                 </div>
                             )}
 
-                            {/* Accordion layers */}
                             <div className="flex-1 overflow-y-auto p-4 space-y-3">
                                 {eventsLoading
                                     ? [0, 1, 2].map(i => (
                                         <div key={i} className="rounded-lg border border-border-dark bg-surface-dark p-4 animate-pulse h-16" />
                                     ))
                                     : events.map((event, i) => (
-                                        <AccordionLayer key={event.id || i} layer={eventToLayer(event)} content={event.content || null} parsedPayload={event.parsedPayload} />
+                                        <AccordionLayer key={event.id || i} layer={eventToLayer(event, rawEvents.filter(e => e.stage === event.stage || (event.stage === 'layer1' && e.stage === 'submission')))} content={event.content || null} parsedPayload={event.parsedPayload} />
                                     ))
                                 }
                             </div>
