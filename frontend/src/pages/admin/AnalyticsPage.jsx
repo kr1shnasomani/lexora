@@ -78,7 +78,7 @@ export default function AnalyticsPage() {
                             <div className="flex justify-between items-start mb-5 flex-wrap gap-3">
                                 <div>
                                     <h3 className="text-lg font-bold text-white">Loss Prevention Trajectory</h3>
-                                    <p className="text-slate-400 text-sm">Expected vs. Prevented Loss (Millions)</p>
+                                    <p className="text-slate-400 text-sm">Expected vs. Prevented Loss</p>
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <div className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-slate-600" /><span className="text-xs text-slate-400">Expected</span></div>
@@ -99,14 +99,30 @@ export default function AnalyticsPage() {
                                             {[250, 175, 100, 25].map(y => (
                                                 <line key={y} x1="0" x2="800" y1={y} y2={y} stroke="#333" strokeWidth="1" strokeDasharray="4" opacity="0.25" />
                                             ))}
-                                            <path d="M0,200 Q200,180 400,150 T800,100" fill="none" stroke="#64748b" strokeWidth="3" strokeDasharray="8 4" opacity="0.55" />
-                                            <path d="M0,220 Q200,190 400,100 T800,50 V300 H0 Z" fill="url(#gradientRed)" />
-                                            <path d="M0,220 Q200,190 400,100 T800,50" fill="none" stroke="#e83049" strokeWidth="4" />
-                                            <circle cx="400" cy="100" r="6" fill="#211113" stroke="#e83049" strokeWidth="3" />
-                                            <circle cx="800" cy="50" r="6" fill="#211113" stroke="#e83049" strokeWidth="3" />
+                                            {(() => {
+                                                const traj = data?.trajectory || []
+                                                if (!traj.length) return null
+                                                const maxV = Math.max(1, ...traj.map(t => Math.max(t.expected, t.prevented)))
+
+                                                const expPts = traj.map((t, i) => `${(i / Math.max(1, traj.length - 1)) * 800},${300 - ((t.expected / maxV) * 270)}`).join(' L ')
+                                                const prevPts = traj.map((t, i) => `${(i / Math.max(1, traj.length - 1)) * 800},${300 - ((t.prevented / maxV) * 270)}`).join(' L ')
+
+                                                return (
+                                                    <>
+                                                        {expPts && <path d={`M ${expPts}`} fill="none" stroke="#64748b" strokeWidth="3" strokeDasharray="8 4" opacity="0.55" />}
+                                                        {prevPts && <path d={`M ${prevPts} V 300 H 0 Z`} fill="url(#gradientRed)" />}
+                                                        {prevPts && <path d={`M ${prevPts}`} fill="none" stroke="#e83049" strokeWidth="4" />}
+                                                        {traj.map((t, i) => {
+                                                            const x = (i / Math.max(1, traj.length - 1)) * 800
+                                                            const y = 300 - ((t.prevented / maxV) * 270)
+                                                            return <circle key={i} cx={x} cy={y} r="6" fill="#211113" stroke="#e83049" strokeWidth="3" />
+                                                        })}
+                                                    </>
+                                                )
+                                            })()}
                                         </svg>
                                         <div className="flex justify-between text-xs text-slate-500 mt-3 px-1 font-mono">
-                                            {(data?.trajectory || []).map(t => <span key={t.week}>{t.week}</span>)}
+                                            {(data?.trajectory || []).map((t, i) => <span key={i}>{t.label}</span>)}
                                         </div>
                                     </div>
                                 )

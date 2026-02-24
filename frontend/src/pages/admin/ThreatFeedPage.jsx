@@ -15,6 +15,52 @@ const LEVEL_STYLE = {
 function AlertCard({ alert }) {
     const style = LEVEL_STYLE[alert.level] || LEVEL_STYLE['Medium']
     const { featured, borderGlow, iconBg, levelBg, scoreColor, barColor } = style
+
+    // Try to prettify the description if it contains key-value pairs or looks like JSON
+    let renderedDescription = null
+    try {
+        // Many alerts from the rules engine come through looking like "layer: 2 | ruleset_id: ... | status: REJECT"
+        if (typeof alert.description === 'string' && alert.description.includes(' | ')) {
+            const parts = alert.description.split(' | ')
+            renderedDescription = (
+                <div className="flex flex-col gap-2 mt-2 bg-[#211113]/50 p-3 rounded-md border border-[#38292b]">
+                    {parts.map((p, i) => {
+                        const [key, ...rest] = p.split(':')
+                        const val = rest.join(':').trim()
+                        if (!key || !val) return <span key={i} className="text-slate-300 text-xs font-mono break-all">{p}</span>
+                        return (
+                            <div key={i} className="flex flex-col">
+                                <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">{key.trim()}</span>
+                                <span className="text-xs font-mono text-slate-300 break-words">{val}</span>
+                            </div>
+                        )
+                    })}
+                </div>
+            )
+        } else if (typeof alert.description === 'string' && alert.description.startsWith('{')) {
+            // Attempt strict JSON parse
+            const data = JSON.parse(alert.description)
+            renderedDescription = (
+                <div className="flex flex-col gap-2 mt-2 bg-[#211113]/50 p-3 rounded-md border border-[#38292b]">
+                    {Object.entries(data).map(([key, value], i) => (
+                        <div key={i} className="flex flex-col">
+                            <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">{key}</span>
+                            <span className="text-xs font-mono text-slate-300 break-words">{
+                                typeof value === 'object' ? JSON.stringify(value) : String(value)
+                            }</span>
+                        </div>
+                    ))}
+                </div>
+            )
+        }
+    } catch (_) {
+        // Fallback to normal text string below
+    }
+
+    if (!renderedDescription) {
+        renderedDescription = <p className="text-sm text-slate-300 leading-relaxed pt-1">{alert.description}</p>
+    }
+
     return (
         <div className={`bg-surface-dark rounded-xl overflow-hidden border flex flex-col transition-colors ${featured ? borderGlow : 'border-border-dark hover:border-slate-500'}`}>
             <div className="p-6 flex flex-col flex-1">
@@ -31,7 +77,7 @@ function AlertCard({ alert }) {
                     <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider ${levelBg}`}>{alert.level}</span>
                 </div>
 
-                <div className="mb-5 space-y-2">
+                <div className="mb-2 space-y-2 flex-1">
                     <div className="flex justify-between items-center text-sm">
                         <span className="text-slate-400">Confidence Score</span>
                         <span className={`font-bold ${scoreColor}`}>{alert.score || 0}%</span>
@@ -39,22 +85,11 @@ function AlertCard({ alert }) {
                     <div className="w-full bg-border-dark rounded-full h-1.5 overflow-hidden">
                         <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${alert.score || 0}%` }} />
                     </div>
-                    <p className="text-sm text-slate-300 leading-relaxed pt-1">{alert.description}</p>
-                </div>
 
-                <div className="grid grid-cols-3 gap-2 mt-auto">
-                    <button className="px-3 py-2 rounded-lg text-sm font-medium transition-all bg-primary text-white hover:bg-[#d02038] shadow-lg shadow-primary/20 flex items-center justify-center gap-1">
-                        <span className="material-symbols-outlined text-[15px]">search_check</span>
-                        Investigate
-                    </button>
-                    <button className="px-3 py-2 rounded-lg text-sm font-medium transition-all border border-border-dark text-white hover:bg-border-dark/50 flex items-center justify-center gap-1">
-                        <span className="material-symbols-outlined text-[15px]">block</span>
-                        Freeze
-                    </button>
-                    <button className="px-3 py-2 rounded-lg text-sm font-medium transition-all bg-[#38292b] border border-border-dark text-slate-400 hover:text-white hover:bg-border-dark/70 flex items-center justify-center gap-1">
-                        <span className="material-symbols-outlined text-[15px]">close</span>
-                        Dismiss
-                    </button>
+                    {/* Rendered Description Payload */}
+                    <div className="pt-2">
+                        {renderedDescription}
+                    </div>
                 </div>
             </div>
         </div>

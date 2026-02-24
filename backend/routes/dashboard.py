@@ -141,41 +141,47 @@ async def get_dashboard_summary():
         # Maximize information by dumping payload keys
         payload_desc = ""
         payload_raw = e.get("payload")
+        
+        # Filter empty payloads completely
+        if not payload_raw or payload_raw == "{}" or payload_raw == "":
+            continue
+            
         score = 0  # Initialize score
         level = None
-        if payload_raw:
-            try:
-                p = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
-                if p and isinstance(p, dict):
-                    # Format something readable
-                    parts = []
-                    if "fraud_score" in p:
-                        score = round(p['fraud_score'] * 100)
-                        parts.append(f"Risk: {score:.1f}%")
-                    elif "score" in p: # Fallback to 'score' if 'fraud_score' not present
-                        score = round(p['score'] * 100)
-                        parts.append(f"Score: {score:.1f}%")
-                        
-                    # Explicit Threat Level Assignment Mapping
-                    if p.get("status") == "REJECT" or p.get("status") == "DENY" or p.get("decision") == "auto_reject":
-                        level = "Critical"
-                    elif p.get("status") == "REVIEW" or p.get("decision") == "manual_review":
-                        level = "High"
-                    elif p.get("decision") == "auto_approve" or p.get("status") == "APPROVE":
-                        level = "Low"
-                        
-                    for k, v in list(p.items())[:6]:  # Show a few top-level keys
-                        if k not in ("score", "fraud_score", "diagnostics", "timing_ms", "fallbacks"):
-                            short_v = str(v)
-                            if len(short_v) > 60:
-                                short_v = short_v[:57] + "..."
-                            parts.append(f"{k}: {short_v}")
-                    payload_desc = " | ".join(parts)
-            except:
-                payload_desc = str(payload_raw)
+        try:
+            p = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
+            if not p or not isinstance(p, dict):
+                continue
                 
-        if not payload_desc:
-            payload_desc = f"Processed {stage} layer."
+            # Format something readable
+            parts = []
+            if "fraud_score" in p:
+                score = round(p['fraud_score'] * 100)
+                parts.append(f"Risk: {score:.1f}%")
+            elif "score" in p: # Fallback to 'score' if 'fraud_score' not present
+                score = round(p['score'] * 100)
+                parts.append(f"Score: {score:.1f}%")
+                
+            # Explicit Threat Level Assignment Mapping
+            if p.get("status") == "REJECT" or p.get("status") == "DENY" or p.get("decision") == "auto_reject":
+                level = "Critical"
+            elif p.get("status") == "REVIEW" or p.get("decision") == "manual_review":
+                level = "High"
+            elif p.get("decision") == "auto_approve" or p.get("status") == "APPROVE":
+                level = "Low"
+                
+            for k, v in list(p.items())[:6]:  # Show a few top-level keys
+                if k not in ("score", "fraud_score", "diagnostics", "timing_ms", "fallbacks"):
+                    short_v = str(v)
+                    if len(short_v) > 60:
+                        short_v = short_v[:57] + "..."
+                    parts.append(f"{k}: {short_v}")
+            payload_desc = " | ".join(parts)
+        except:
+            payload_desc = str(payload_raw)
+            
+        if not payload_desc or payload_desc.strip() == "":
+            continue
             
         if len(payload_desc) > 200:
             payload_desc = payload_desc[:197] + "..."
