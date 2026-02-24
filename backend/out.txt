@@ -1,0 +1,6 @@
+
+=== RES 1 ===
+session_id='fde21f4a-ab29-480f-b062-d1a81e27a27d' message='Hello Alex Chang! How can I assist you today?' tool_calls_executed=[]
+
+=== RES 2 ===
+session_id='fde21f4a-ab29-480f-b062-d1a81e27a27d' message='<tool_call>\n{"name": "get_table_data", "arguments": {"filters": {"user_id": "11111111-2222-3333-4444-555555555555", "status": "active"}, "table_name": "claims"}}\n</tool_call>' tool_calls_executed=['get_table_data']

@@ -15,6 +15,7 @@ import AuditLogPage from './pages/admin/AuditLogPage'
 import AnalyticsPage from './pages/admin/AnalyticsPage'
 import NetworkGraphPage from './pages/admin/NetworkGraphPage'
 import ConfigPage from './pages/admin/ConfigPage'
+import AdminGlobalOverlay from './components/admin/AdminGlobalOverlay'
 
 // Customer pages
 import HomePage from './pages/customer/HomePage'
@@ -54,6 +55,7 @@ export default function App() {
         <AuthProvider>
             <BrowserRouter>
                 <ForceRedirect />
+                <AdminGlobalOverlay />
                 <Routes>
                     {/* ─── Landing ─────────────────────────────────── */}
                     <Route path="/" element={<ModeSelectionPage />} />
