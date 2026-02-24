@@ -27,21 +27,9 @@ def run_fusion(
     composite = weights[0] * t1_score + weights[1] * t2_score + weights[2] * t3_score
     composite = round(min(1.0, max(0.0, composite)), 4)
 
-    # ── Critical Overrides for Demo Scenarios ─────────────────────
+    # ── Pure Mathematical Computation (Overrides Removed) ─────────────
     t1_flags = tier1_result.get("flags", {})
     t3_cluster_size = tier3_result.get("cluster_summary", {}).get("size", 1)
-
-    # 1. Duplicate Invoice is critical fraud
-    if t1_flags.get("duplicate_invoice"):
-        composite = max(composite, 0.95)
-
-    # 2. Graph Rings (size >= 2) trigger fraud investigations
-    if t3_cluster_size >= 2:
-        composite = max(composite, 0.85)
-
-    # 3. High Velocity triggers fraud investigations
-    if t1_flags.get("claimant_velocity"):
-        composite = max(composite, 0.80)
 
     # ── Risk band ────────────────────────────────────────────────
     if composite >= high_threshold:
