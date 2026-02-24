@@ -20,6 +20,23 @@ export default function PolicyDetailPage() {
     const policyId = params.get('id')
     const [toastError, setToastError] = useState(null)
 
+    const handleDownload = async (e, apiUrl) => {
+        if (e) e.stopPropagation();
+        try {
+            // Note: In development this proxies to the backend.
+            const res = await fetch(apiUrl);
+            if (!res.ok) throw new Error('Could not fetch document');
+            const data = await res.json();
+            if (data.url) {
+                window.open(data.url, '_blank');
+            } else {
+                setToastError('Document URL not found');
+            }
+        } catch (err) {
+            setToastError(err.message || 'Download failed');
+        }
+    };
+
     // 1. Get Auth Context
     const { user } = useAuth()
 
@@ -111,7 +128,7 @@ export default function PolicyDetailPage() {
                             ? [0, 1, 2].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)
                             : (policy?.documents?.length > 0) ? (
                                 policy.documents.map(doc => (
-                                    <div key={doc.id} className="flex items-center justify-between p-4 rounded-xl border border-surface-border bg-surface-dark-customer hover:bg-surface-border/50 transition-colors cursor-pointer" onClick={() => window.open(doc.url, '_blank')}>
+                                    <div key={doc.id} className="flex items-center justify-between p-4 rounded-xl border border-surface-border bg-surface-dark-customer hover:bg-surface-border/50 transition-colors cursor-pointer" onClick={(e) => handleDownload(e, doc.url)}>
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                                                 <span className="material-symbols-outlined text-primary text-[20px]">description</span>
@@ -121,7 +138,9 @@ export default function PolicyDetailPage() {
                                                 <span className="text-xs text-slate-500">Related to: {doc.claim_number}</span>
                                             </div>
                                         </div>
-                                        <span className="material-symbols-outlined text-slate-500 text-[20px] hover:text-white transition-colors">download</span>
+                                        <button onClick={(e) => handleDownload(e, doc.url)} className="p-2 -mr-2 hover:bg-white/5 rounded-full transition-colors flex items-center justify-center group" title="Download Document">
+                                            <span className="material-symbols-outlined text-slate-500 text-[20px] group-hover:text-white transition-colors">download</span>
+                                        </button>
                                     </div>
                                 ))
                             ) : (

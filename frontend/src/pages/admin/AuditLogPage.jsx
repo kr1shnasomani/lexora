@@ -189,7 +189,7 @@ function renderPayload(payload) {
                         <div className="bg-[#1f1618] border border-white/5 rounded p-3 flex-1">
                             <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Approved Amount</div>
                             <div className="text-sm font-mono text-white">
-                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(payload.recommended_amount)}
+                                {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(payload.recommended_amount)}
                             </div>
                         </div>
                     )}
@@ -270,7 +270,7 @@ function renderPayload(payload) {
                         <div className="bg-[#1f1618] border border-white/5 rounded p-3 flex-1">
                             <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Settlement Amount</div>
                             <div className="text-xl font-mono text-white font-bold">
-                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(payload.approved_amount)}
+                                {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(payload.approved_amount)}
                             </div>
                         </div>
                     )}

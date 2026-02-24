@@ -159,7 +159,7 @@ export default function HomePage() {
                                 <div className="p-5 relative -mt-8">
                                     <span className="inline-block px-2 py-1 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider rounded mb-2">New</span>
                                     <h4 className="text-lg font-bold text-white mb-1">Travel Insurance 2.0</h4>
-                                    <p className="text-slate-400 text-sm mb-4">Instant coverage for flight delays and lost baggage. From $5/day.</p>
+                                    <p className="text-slate-400 text-sm mb-4">Instant coverage for flight delays and lost baggage. From ₹5/day.</p>
                                     <button onClick={() => navigate('/customer/explore')} className="w-full py-2 rounded-lg bg-surface-border text-white text-sm font-bold hover:bg-white hover:text-surface-dark-customer transition-colors">
                                         Get a Quote
                                     </button>

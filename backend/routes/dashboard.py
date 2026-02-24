@@ -55,7 +55,7 @@ def format_currency(amount):
     try:
         if amount is None:
             return "—"
-        return f"${float(amount):,.2f}"
+        return f"₹{float(amount):,.2f}"
     except:
         return str(amount)
 
@@ -76,7 +76,7 @@ async def get_dashboard_summary():
     auto_res_rate = f"{(auto_resolved / total_claims * 100):.1f}%" if total_claims > 0 else "0%"
     
     kpis = [
-        {"label": "Risk Exposure", "value": f"${exposure:,.0f}", "delta": "+12.4%"},
+        {"label": "Risk Exposure", "value": f"₹{exposure:,.0f}", "delta": "+12.4%"},
         {"label": "Auto-Resolution", "value": auto_res_rate, "delta": "+2.1%"},
         {"label": "Fraud Flags", "value": str(flagged), "delta": "+3"},
         {"label": "Processing Time", "value": "1.2s", "delta": "-0.4s"},

@@ -28,7 +28,7 @@ async def get_analytics_summary():
     auto_res_rate = f"{(auto_resolved / total_claims * 100):.1f}%" if total_claims > 0 else "0%"
     
     kpi_cards = [
-        {"label": "Risk Exposure", "value": f"${exposure_sum:,.0f}", "change": "Live", "change_color": "text-[#e83049]", "change_icon": "trending_up", "icon": "account_balance_wallet", "sub": "Capital currently in holding queues"},
+        {"label": "Risk Exposure", "value": f"₹{exposure_sum:,.0f}", "change": "Live", "change_color": "text-[#e83049]", "change_icon": "trending_up", "icon": "account_balance_wallet", "sub": "Capital currently in holding queues"},
         {"label": "Auto-Resolution", "value": auto_res_rate, "change": "Live", "change_color": "text-emerald-500", "change_icon": "trending_up", "icon": "bolt", "sub": "Zero-touch pipeline clearance"},
         {"label": "Fraud Flags", "value": str(flagged), "change": "Live", "change_color": "text-primary", "change_icon": "gavel", "icon": "gavel", "sub": "Pending explicit administrative evaluation"}
     ]
