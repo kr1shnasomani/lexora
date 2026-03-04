@@ -4,7 +4,6 @@
  * Usage:
  *   <Skeleton className="h-8 w-48 rounded-lg" />           // single bar
  *   <SkeletonCard />                                        // KPI card
- *   <SkeletonTable rows={5} cols={4} />                     // table rows
  *   <SkeletonList items={3} />                              // list rows
  */
 
@@ -25,21 +24,6 @@ export function SkeletonCard() {
             <Skeleton className="h-3 w-24" />
             <Skeleton className="h-8 w-32" />
             <Skeleton className="h-3 w-40" />
-        </div>
-    )
-}
-
-/* Table rows */
-export function SkeletonTable({ rows = 4, cols = 4 }) {
-    return (
-        <div className="space-y-2" aria-hidden="true">
-            {Array.from({ length: rows }).map((_, r) => (
-                <div key={r} className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-                    {Array.from({ length: cols }).map((_, c) => (
-                        <Skeleton key={c} className={`h-5 ${c === 0 ? 'w-3/4' : 'w-full'}`} />
-                    ))}
-                </div>
-            ))}
         </div>
     )
 }

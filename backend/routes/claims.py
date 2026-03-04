@@ -14,7 +14,6 @@ from services.audit import log_audit_event, get_audit_trail
 from engines.layer2 import evaluate_policy
 from engines.fraud_engine import run_fraud_check
 from engines.risk_fusion import run_decision
-import urllib.parse
 
 router = APIRouter(prefix="/claims", tags=["Claims"])
 

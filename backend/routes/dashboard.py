@@ -2,9 +2,77 @@ from fastapi import APIRouter
 from database import get_supabase
 import json
 from datetime import datetime
-import traceback
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+# Indian city coordinates [lng, lat] for fraud hotspot mapping
+_CITY_COORDS: dict = {
+    "Mumbai":    [72.8777, 19.0760],
+    "Delhi":     [77.2090, 28.6139],
+    "Bangalore": [77.5946, 12.9716],
+    "Kolkata":   [88.3639, 22.5726],
+    "Chennai":   [80.2707, 13.0827],
+    "Hyderabad": [78.4867, 17.3850],
+    "Pune":      [73.8567, 18.5204],
+    "Ahmedabad": [72.5714, 23.0225],
+    "Jaipur":    [75.7873, 26.9124],
+    "Surat":     [72.8311, 21.1702],
+    "Lucknow":   [80.9462, 26.8467],
+    "Nagpur":    [79.0882, 21.1458],
+    "Patna":     [85.1376, 25.5941],
+    "Bhopal":    [77.4126, 23.2599],
+    "Kochi":     [76.2673, 9.9312],
+}
+_CITIES = list(_CITY_COORDS.keys())
+
+
+def _compute_hotspots(db) -> list:
+    """
+    Derive fraud hotspots from recent claims by deterministically assigning
+    each claim to an Indian city via a hash of the claim ID.
+    In production, real geo-data from the claim form would drive this.
+    """
+    try:
+        result = (
+            db.table("claims")
+            .select("id, fraud_score, final_decision, status")
+            .order("created_at", desc=True)
+            .limit(200)
+            .execute()
+        )
+        claims = result.data or []
+
+        city_data: dict = {}
+        for c in claims:
+            cid = c.get("id") or ""
+            city = _CITIES[sum(ord(ch) for ch in cid) % len(_CITIES)]
+            score = float(c.get("fraud_score") or 0)
+            if city not in city_data:
+                city_data[city] = {"count": 0, "total_score": 0.0}
+            city_data[city]["count"] += 1
+            city_data[city]["total_score"] += score
+
+        hotspots = []
+        for city, info in city_data.items():
+            avg = info["total_score"] / info["count"] if info["count"] > 0 else 0
+            risk = (
+                "Critical" if avg >= 0.7 else
+                "High"     if avg >= 0.4 else
+                "Medium"   if avg >= 0.2 else
+                "Low"
+            )
+            hotspots.append({
+                "city":            city,
+                "coordinates":     _CITY_COORDS[city],
+                "risk":            risk,
+                "count":           info["count"],
+                "avg_fraud_score": round(avg, 3),
+            })
+
+        hotspots.sort(key=lambda h: h["avg_fraud_score"], reverse=True)
+        return hotspots
+    except Exception:
+        return []
 
 def time_ago(dt_str):
     if not dt_str:
@@ -227,5 +295,6 @@ async def get_dashboard_summary():
         "kpis": kpis,
         "priority_queue": priority_queue,
         "threat_alerts": threat_alerts,
-        "graph_excerpt": graph_excerpt
+        "graph_excerpt": graph_excerpt,
+        "fraud_hotspots": _compute_hotspots(db),
     }

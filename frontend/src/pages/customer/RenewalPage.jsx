@@ -5,17 +5,20 @@ import BottomNav from '../../components/customer/BottomNav'
 import { useFetch } from '../../hooks/useFetch'
 import { Skeleton } from '../../components/shared/Skeleton'
 import ErrorToast from '../../components/shared/ErrorToast'
+import { useAuth } from '../../contexts/AuthContext'
 
 const steps = ['Coverage Review', 'Adjustments', 'Payment', 'Confirm']
 
 export default function RenewalPage() {
     const navigate = useNavigate()
+    const { user } = useAuth()
     const [step, setStep] = useState(0)
     const [addons, setAddons] = useState({ roadside: false, rental: false, glass: false })
     const [toastError, setToastError] = useState(null)
 
-    // Fetch all policies and show expired / expiring ones
-    const { data, loading, error } = useFetch('/api/policies')
+    // Fetch customer-specific policies
+    const apiUrl = user?.email ? `/api/customer/policies?email=${encodeURIComponent(user.email)}` : null
+    const { data, loading, error } = useFetch(apiUrl)
     if (error && !toastError) setToastError(error)
 
     const policies = data?.items || []
