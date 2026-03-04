@@ -4,9 +4,7 @@ const ModeSelectionPage = () => (
     <div className="relative flex min-h-screen w-full flex-col items-center justify-center p-4 sm:p-8 glow-effect bg-background-dark text-slate-100">
         <header className="mb-12 flex flex-col items-center gap-4 text-center z-10">
             <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <span className="material-symbols-outlined text-[32px]">shield_lock</span>
-                </div>
+                <img src="/lexora-logo.png" alt="Lexora" className="h-12 w-12 object-contain" />
                 <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">LEXORA</h1>
             </div>
             <p className="max-w-md text-slate-400 text-lg">
