@@ -15,10 +15,10 @@ export const AuthProvider = ({ children }) => {
     const [role, setRole] = useState(null)
     const [loading, setLoading] = useState(true)
 
-    // Rehydrate session from sessionStorage on page refresh
+    // Rehydrate session from localStorage on page refresh
     useEffect(() => {
         try {
-            const stored = sessionStorage.getItem(SESSION_KEY)
+            const stored = localStorage.getItem(SESSION_KEY)
             if (stored) {
                 const { user: u, role: r } = JSON.parse(stored)
                 setUser(u)
@@ -37,8 +37,8 @@ export const AuthProvider = ({ children }) => {
         const u = { id: 'demo-user-001', email, name }
         setUser(u)
         setRole(r)
-        // Persist across page refreshes (not across browser close — sessionStorage)
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify({ user: u, role: r }))
+        // Persist until explicit sign-out (localStorage survives tab/browser close)
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ user: u, role: r }))
     }
 
     /**
@@ -48,7 +48,7 @@ export const AuthProvider = ({ children }) => {
     const signOut = async () => {
         setUser(null)
         setRole(null)
-        sessionStorage.removeItem(SESSION_KEY)
+        localStorage.removeItem(SESSION_KEY)
     }
 
     return (

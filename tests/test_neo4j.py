@@ -18,12 +18,12 @@ _backend_dir = Path(__file__).resolve().parent.parent / "backend"
 if str(_backend_dir) not in sys.path:
     sys.path.insert(0, str(_backend_dir))
 
-from dotenv import load_dotenv  # type: ignore[import]
+from dotenv import load_dotenv
 load_dotenv(_backend_dir.parent / ".env")
 
-from engines.layer3.neo4j_client import Neo4jConnector  # type: ignore[import]  # noqa: E402
-from config import get_settings  # type: ignore[import]  # noqa: E402
-from database import get_supabase  # type: ignore[import]  # noqa: E402
+from engines.layer3.neo4j_client import Neo4jConnector  # noqa: E402
+from config import get_settings  # noqa: E402
+from database import get_supabase  # noqa: E402
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗

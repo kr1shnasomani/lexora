@@ -2,8 +2,8 @@ import asyncio
 import json
 import uuid
 from datetime import datetime
-from database import get_supabase  # type: ignore[import]
-from engines.risk_fusion import run_decision  # type: ignore[import]
+from database import get_supabase
+from engines.risk_fusion import run_decision
 
 db = get_supabase()
 
