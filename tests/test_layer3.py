@@ -31,10 +31,10 @@ if str(_backend_dir) not in sys.path:
     sys.path.insert(0, str(_backend_dir))
 
 # ─── Real Supabase client (no mocks) ─────────────────────────────────────────
-from database import get_supabase  # type: ignore[import]  # noqa: E402
+from database import get_supabase  # noqa: E402
 
 try:
-    import requests  # type: ignore[import]
+    import requests
 except ImportError:
     print("ERROR: 'requests' not found. Run: pip install requests")
     sys.exit(1)
@@ -679,7 +679,7 @@ def run_pass2():
 
     # Stage F — force failure (bad Qdrant URL)
     print("\n  [Pre-cleaning Stage F: wiping Qdrant vectors for this claim]")
-    from engines.layer3.qdrant_client import QdrantConnector  # type: ignore[import]  # noqa: PLC0415
+    from engines.layer3.qdrant_client import QdrantConnector  # noqa: PLC0415
     qc = QdrantConnector({
         "qdrant_url": os.environ.get("QDRANT_URL"),
         "qdrant_api_key": os.environ.get("QDRANT_API_KEY"),

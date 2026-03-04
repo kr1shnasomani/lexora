@@ -55,7 +55,7 @@ sys.modules.setdefault("database", _database_mod)
 sys.modules.setdefault("services", _services_mod)
 sys.modules.setdefault("services.audit", _audit_mod)
 
-from engines.layer2 import policy_engine as pe  # type: ignore[import]  # noqa: E402
+from engines.layer2 import policy_engine as pe  # noqa: E402
 
 # ─── Rule packs ──────────────────────────────────────────────────────────────
 
