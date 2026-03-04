@@ -332,7 +332,44 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 -- ============================================================
+-- CHAT
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.chat_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    title TEXT DEFAULT 'New Analysis Session',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.chat_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own sessions" ON public.chat_sessions
+    FOR ALL USING (auth.uid() = user_id);
+
+CREATE TABLE IF NOT EXISTS public.chat_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID REFERENCES public.chat_sessions(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own messages" ON public.chat_messages
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM public.chat_sessions
+            WHERE id = chat_messages.session_id AND user_id = auth.uid()
+        )
+    );
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created ON public.chat_messages(session_id, created_at);
+
+-- ============================================================
 -- DONE
 -- Notes:
--- - RLS policies are not enabled here. Turn them on after schema verification.
+-- - RLS policies are enabled for chat tables.
+-- - For other tables, turn on RLS after schema verification.
 -- ============================================================

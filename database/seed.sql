@@ -6,9 +6,9 @@
 -- ============================================================
 INSERT INTO public.users (id, email, full_name, role) VALUES
   ('c2b1b8a6-7a9b-4a7b-ae15-7f1f2a1d2c33', 'ananya.rao@insurer.com', 'Ananya Rao', 'underwriter'),
-  ('d3c2c9b7-8bac-5b8c-bf26-8g2g3b2e3d44', 'vikram.singh@insurer.com', 'Vikram Singh', 'admin'),
-  ('e4d3dac8-9cbd-6c9d-c037-9h3h4c3f4e55', 'priya.kumar@insurer.com', 'Priya Kumar', 'auditor'),
-  ('f5e4ebd9-adce-7dae-d148-ai4i5d4g5f66', 'rajesh.patel@insurer.com', 'Rajesh Patel', 'siu')
+  ('d3c2c9b7-8bac-5b8c-bf26-8a2a3b2e3d44', 'vikram.singh@insurer.com', 'Vikram Singh', 'admin'),
+  ('e4d3dac8-9cbd-6c9d-c037-9a3a4c3f4e55', 'priya.kumar@insurer.com', 'Priya Kumar', 'auditor'),
+  ('f5e4ebd9-adce-7dae-d148-ab4b5d4a5f66', 'rajesh.patel@insurer.com', 'Rajesh Patel', 'siu')
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
@@ -159,7 +159,11 @@ INSERT INTO public.configuration (config_key, config_value, config_type, descrip
   ('fraud.claim_frequency_window_days', '90', 'threshold', 'Days to check for claim frequency anomalies'),
   ('fraud.claim_frequency_max', '3', 'threshold', 'Max claims in frequency window before flagging'),
   ('system.auto_process', 'true', 'feature_flag', 'Whether to auto-run pipeline after extraction'),
-  ('extraction.min_confidence', '0.85', 'threshold', 'Minimum extraction confidence for auto-processing')
+  ('extraction.min_confidence', '0.85', 'threshold', 'Minimum extraction confidence for auto-processing'),
+  ('routing.min_confidence', '0.60', 'threshold', 'Minimum L4 routing confidence required before decision'),
+  ('routing.auto_approve_confidence', '0.85', 'threshold', 'Confidence threshold for full auto-approval routing'),
+  ('fraud.tier3_enable_neo4j', 'false', 'feature_flag', 'Enable Neo4j graph analysis in L3 Tier 3'),
+  ('fraud.tier2_enable_qdrant', 'false', 'feature_flag', 'Enable Qdrant vector similarity search in L3 Tier 2')
 ON CONFLICT (config_key) DO NOTHING;
 
 -- ============================================================
@@ -186,7 +190,7 @@ INSERT INTO public.claims (id, claim_number, policy_id, idempotency_key, status,
     '2026-02-19T10:31:00Z'
   ),
   (
-    'a0c2d4e6-3f1b-5c2d-b54g-74cec7g1b0g2',
+    'a0c2d4e6-3f1b-5c2d-b54a-74cec7a1b0a2',
     'CLM-2026-000046',
     '807d584e-d36e-49d0-92a6-b775986f2dc9',
     'seed_claim_002',
@@ -216,12 +220,12 @@ SET final_decision = 'auto_approve',
     decision_rationale = 'Low fraud risk (0.12). All policy rules passed. Amount within limits after deductible and copay.',
     decision_output = '{"route":"auto_approve","expected_loss":1020,"fraud_score":0.12,"claimed_amount":8500,"thresholds":{"high":0.7,"low":0.3}}',
     processed_at = '2026-01-21T08:05:00Z'
-WHERE id = 'a0c2d4e6-3f1b-5c2d-b54g-74cec7g1b0g2';
+WHERE id = 'a0c2d4e6-3f1b-5c2d-b54a-74cec7a1b0a2';
 
 -- Sample audit events
 INSERT INTO public.audit_events (claim_id, stage, event_type, payload, duration_ms) VALUES
   ('9f1c3d4b-2e0b-4b0c-a43f-63bdb6f0a9f1', 'layer1', 'completed', '{"fields_extracted":9,"warnings":[],"confidence":0.93}', 2340),
-  ('a0c2d4e6-3f1b-5c2d-b54g-74cec7g1b0g2', 'layer1', 'completed', '{"fields_extracted":9,"warnings":[],"confidence":0.96}', 1820),
-  ('a0c2d4e6-3f1b-5c2d-b54g-74cec7g1b0g2', 'policy_engine', 'completed', '{"rules_evaluated":3,"passed":3,"failed":0}', 45),
-  ('a0c2d4e6-3f1b-5c2d-b54g-74cec7g1b0g2', 'fraud_engine', 'completed', '{"fraud_score":0.12,"tiers_evaluated":3}', 320),
-  ('a0c2d4e6-3f1b-5c2d-b54g-74cec7g1b0g2', 'decision', 'completed', '{"decision":"auto_approve","expected_loss":1020}', 12);
+  ('a0c2d4e6-3f1b-5c2d-b54a-74cec7a1b0a2', 'layer1', 'completed', '{"fields_extracted":9,"warnings":[],"confidence":0.96}', 1820),
+  ('a0c2d4e6-3f1b-5c2d-b54a-74cec7a1b0a2', 'policy_engine', 'completed', '{"rules_evaluated":3,"passed":3,"failed":0}', 45),
+  ('a0c2d4e6-3f1b-5c2d-b54a-74cec7a1b0a2', 'fraud_engine', 'completed', '{"fraud_score":0.12,"tiers_evaluated":3}', 320),
+  ('a0c2d4e6-3f1b-5c2d-b54a-74cec7a1b0a2', 'decision', 'completed', '{"decision":"auto_approve","expected_loss":1020}', 12);

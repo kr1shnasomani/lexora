@@ -1,4 +1,3 @@
-import os
 from typing import List, Dict, Any
 import requests
 from config import get_settings

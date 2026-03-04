@@ -15,7 +15,7 @@ from routes.customer import router as customer_router, user_router, notification
 from routes.dashboard import router as dashboard_router
 from routes.auth import router as auth_router
 from routes.pdf_export import router as pdf_export_router
-from routes.config import router as config_router
+from routes.settings import router as config_router
 from routes.network import router as network_router
 from routes.chat import router as chat_router
 from routes.analytics import router as analytics_router
@@ -58,14 +58,12 @@ async def startup_event():
     async def claim_sweeper():
         while True:
             try:
-                # Log active sweep (remove in production if too noisy)
-                print("[System] Running automated background claim sweep...")
                 res = await process_pending()
                 if res.get("processed_count", 0) > 0:
-                    print(f"[System] Swept {res['processed_count']} active claims. Log: {res.get('logs')}")
+                    print(f"[System] Swept {res['processed_count']} active claims.")
             except Exception as e:
-                print(f"[System] Automated pipeline sweeper error: {e}")
-            
+                print(f"[System] Sweeper error: {e}")
+
             # Run every 30 seconds
             await asyncio.sleep(30)
             
@@ -81,27 +79,4 @@ async def health():
     return {"status": "healthy"}
 
 
-# ── Additional utility endpoints ──────────────────────────────
 
-@app.get("/api/policies")
-async def list_policies():
-    from database import get_supabase
-    db = get_supabase()
-    result = db.table("policies").select("*").execute()
-    return {"policies": result.data or []}
-
-
-@app.get("/api/configuration")
-async def list_configuration():
-    from database import get_supabase
-    db = get_supabase()
-    result = db.table("configuration").select("*").execute()
-    return {"configuration": result.data or []}
-
-
-@app.get("/api/users")
-async def list_users():
-    from database import get_supabase
-    db = get_supabase()
-    result = db.table("users").select("*").execute()
-    return {"users": result.data or []}

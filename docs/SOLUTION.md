@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../lexora-logo.png" alt="Lexora Logo" width="100" />
+</p>
+
 # LEXORA: Neuro-Symbolic Claims Intelligence Platform
 
 ## Solution Overview
