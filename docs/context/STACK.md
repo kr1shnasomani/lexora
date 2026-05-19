@@ -8,14 +8,14 @@
 | Styling | **Tailwind CSS v3** — `@tailwind base/components/utilities` directives in `index.css`. Config in `tailwind.config.js` with custom `colors.primary`, `colors.surface-dark`, etc. |
 | Icons | Lucide React |
 | API calls | `useFetch` hook (`frontend/src/hooks/useFetch.js`) for GET; `fetch()` directly for POST/PUT |
-| Base URL | `import.meta.env.VITE_API_URL \|\| 'http://localhost:8000'` — set in `.env` |
+| Base URL | `VITE_API_URL` — baked into the bundle as a Docker build-arg. Falls back to `'http://localhost:8000'` for local dev outside Docker. |
 | Auth | Mock only — `AuthContext.jsx` using `sessionStorage`. No Supabase JS SDK in use. |
 
 ## Backend
 | Concern | Detail |
 |---|---|
 | Framework | FastAPI + Uvicorn |
-| Python | 3.11 / 3.12 (venv at `backend/venv/`) |
+| Python | 3.12 (multi-stage Docker image — no venv required) |
 | Settings | `backend/config.py` — `pydantic_settings.BaseSettings`, reads `.env` |
 | DB client | `backend/database.py` — `get_supabase()` singleton (Supabase Python client) |
 | Models | `backend/models.py` — all Pydantic request/response schemas |
@@ -42,31 +42,43 @@ FRAUD_LAYER3_ENABLE_JINA_MEDIA=true
 ```
 Default: all `false` (Pass 1 / local-only mode).
 
-## Ports
-| Service | Port |
+## Ports (Docker)
+| Service | Host Port |
 |---|---|
+| React frontend (nginx) | `80` |
 | FastAPI backend | `8000` |
-| Vite frontend | `5173` |
 | n8n | `5678` |
-
-## CI / CD
-| Workflow | File | Trigger |
-|---|---|---|
-| Lint + unit tests + frontend build | `.github/workflows/ci.yml` | Push / PR → `main`, `develop` |
-| Docker build & push to GHCR | `.github/workflows/cd.yml` | Push → `main` |
-
-Only **Layer 2** tests run in CI (mocked — no external services needed). Layer 3/4 integration tests require live Supabase, Qdrant, Neo4j and must be run locally or via a separate job with secrets.
 
 ## Boot Commands
 ```bash
-# Backend (from backend/)
-source venv/bin/activate
-uvicorn main:app --reload --port 8000 --reload-dir ./ --reload-exclude venv
+# Full stack — production mode (one command)
+docker compose up --build
 
-# Frontend (from frontend/)
-npm run dev
+# Dev mode — backend hot-reload (source mounted)
+docker compose --profile dev up --build
+
+# Individual services
+docker compose up backend     # backend only
+docker compose up frontend    # frontend only
+docker compose up n8n         # n8n only
 ```
 
+## CI / CD
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `ci.yml` | Push / PR → `main`, `develop` | Orchestrator — gates lint, test, build |
+| `cd.yml` | Push → `main` | Orchestrator — CI gate → Docker publish |
+| `lint-backend.yml` | via `ci.yml` | Ruff linting on `backend/` |
+| `test-backend.yml` | via `ci.yml` | Layer 2 unit tests inside Docker |
+| `build-frontend.yml` | via `ci.yml` | Vite production build |
+| `docker-build.yml` | via `ci.yml` (PRs only) | Build-check both Docker images |
+| `docker-publish.yml` | via `cd.yml` | Push `ghcr.io/kr1shnasomani/lexora` |
+| `release.yml` | Tag `v*` / manual | Versioned image + GitHub Release |
+| `codeql.yml` | Push / PR / weekly | CodeQL security scan |
+| `dependabot.yml` | Weekly Monday | Automated dep PRs (pip, npm, actions) |
+
+Only **Layer 2** tests run in CI (mocked — no external services needed). Layer 3/4 integration tests require live Supabase, Qdrant, Neo4j and must be run locally or via a separate job with secrets.
+
 ## Dependency Notes
-- `grpcio>=1.62.0` must be pinned **before** `jina` in `requirements.txt` (Python 3.14 build fix).
-- Use `install.sh` for first-time setup — it handles `--no-build-isolation` for grpcio.
+- `grpcio>=1.62.0` is installed from a **pre-built binary wheel** in the Docker builder stage to avoid multi-minute source compilation.
+- No `venv` needed — Docker handles all Python dependencies inside the container.

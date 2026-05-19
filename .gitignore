@@ -110,6 +110,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+# Explicitly exclude backend venv
+backend/venv/
+backend/.venv/
+
+# =========================
+# Frontend build output
+# =========================
+frontend/dist/
+frontend/node_modules/
 
 # =========================
 # IDE / Editor Files
@@ -127,6 +136,7 @@ __pycache__/
 # OS Files
 # =========================
 .DS_Store
+**/.DS_Store
 .AppleDouble
 .LSOverride
 Icon
@@ -147,3 +157,6 @@ working-reference-folder-BE
 # =========================
 n8n_data/
 *.sqlite3
+# Release assets (temp files created by release workflow)
+docker-compose.release.yml
+.env.example.release

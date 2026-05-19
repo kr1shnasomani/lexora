@@ -1,0 +1,38 @@
+name: "Test — Backend (Layer 2)"
+
+# Called by ci.yml orchestrator, or triggered manually.
+# Standalone push/PR triggers removed to avoid duplicate runs.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  test-layer2:
+    name: Layer 2 Policy Engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          load: true
+          tags: lexora-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Layer 2 unit tests inside container
+        # L3/L4 tests require live Supabase + Qdrant + Neo4j — run manually
+        # or via a separate integration job that consumes repo secrets.
+        run: |
+          docker run --rm \
+            -e SUPABASE_URL=https://placeholder.supabase.co \
+            -e SUPABASE_SERVICE_KEY=placeholder \
+            -e GROQ_API_KEY=placeholder \
+            -v ${{ github.workspace }}/tests:/app/tests:ro \
+            lexora-backend:ci \
+            python tests/test_layer2.py

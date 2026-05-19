@@ -9,13 +9,18 @@
   <a href="https://github.com/kr1shnasomani/lexora/actions/workflows/ci.yml">
     <img src="https://github.com/kr1shnasomani/lexora/actions/workflows/ci.yml/badge.svg" alt="CI" />
   </a>
-  <img src="https://img.shields.io/badge/Python-3.14-blue?logo=python&logoColor=white" alt="Python 3.14" />
+  <a href="https://github.com/kr1shnasomani/lexora/releases/latest">
+    <img src="https://img.shields.io/github/v/release/kr1shnasomani/lexora?label=release&color=4CAF50" alt="Latest Release" />
+  </a>
+  <a href="https://github.com/kr1shnasomani/lexora/pkgs/container/lexora">
+    <img src="https://img.shields.io/badge/GHCR-lexora-2496ED?logo=docker&logoColor=white" alt="GHCR" />
+  </a>
+  <img src="https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white" alt="Python 3.12" />
   <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white" alt="React 18" />
   <img src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white" alt="Vite 5" />
   <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
-  <img src="https://img.shields.io/badge/Tailwind_CSS-v3-38BDF8?logo=tailwindcss&logoColor=white" alt="Tailwind CSS" />
 </p>
 
 ---
@@ -50,74 +55,19 @@ Lexora is an end-to-end AI-powered insurance claims platform. It automates the f
 
 ---
 
-## Project Structure
-
-```
-lexora/
-├── backend/
-│   ├── main.py                 # FastAPI entry point
-│   ├── config.py               # Pydantic settings (reads .env)
-│   ├── database.py             # Supabase client singleton
-│   ├── models.py               # Pydantic request/response schemas
-│   ├── state_machine.py        # Claim lifecycle state validation
-│   ├── requirements.txt        # Pinned Python dependencies
-│   ├── routes/                 # claims, customer, dashboard, chat, webhooks
-│   ├── engines/                # policy_engine, fraud_engine, risk_fusion
-│   └── services/audit.py       # Append-only audit event logger
-├── frontend/
-│   ├── vite.config.js          # Dev proxy: /api → http://127.0.0.1:8000
-│   ├── tailwind.config.js      # Design system theme
-│   └── src/
-│       ├── contexts/           # AuthContext
-│       ├── hooks/              # useFetch (polling hook)
-│       └── pages/
-│           ├── admin/          # Dashboard, Claims, Analytics, ThreatFeed
-│           └── customer/       # Portal, Policies, Claims, Renewal
-├── database/
-│   ├── schema.sql              # Tables, enums, RLS policies
-│   └── seed.sql                # Demo users, policies, claims
-├── tests/                      # Integration tests per layer
-├── docs/                       # Architecture docs + AI agent context
-├── docker-compose.yml
-├── install.sh                  # First-time setup (Mac/Linux)
-├── install.ps1                 # First-time setup (Windows)
-└── .env.example                # Backend env template
-```
-
----
-
-## Prerequisites
-
-| Tool | Version | Install |
-|------|---------|---------|
-| Python | 3.14+ | `brew install python@3.14` / [python.org](https://python.org/downloads) |
-| Node.js | 18+ | `brew install node` / [nodejs.org](https://nodejs.org) |
-| Git | any | `brew install git` / [git-scm.com](https://git-scm.com) |
-| Supabase project | — | [supabase.com](https://supabase.com) — free tier is sufficient |
-
-> **Windows:** If `python` isn't found in PowerShell after installing, restart your terminal. You may also need: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
-
----
-
 ## Quick Start
+
+> **Prerequisite:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) — nothing else needed.
 
 ### 1 — Clone and configure
 
 ```bash
-# Mac/Linux
 git clone https://github.com/kr1shnasomani/lexora.git
 cd lexora
 cp .env.example .env
 ```
 
-```powershell
-# Windows (PowerShell)
-git clone https://github.com/kr1shnasomani/lexora.git
-cd lexora
-Copy-Item .env.example .env
-```
-
-Fill in `.env` (minimum required keys):
+Open `.env` and fill in the minimum required keys:
 
 ```env
 SUPABASE_URL=https://your-project-ref.supabase.co
@@ -134,53 +84,97 @@ All other keys are optional — the fraud engine is fail-open and works without 
 2. Run `database/schema.sql` — creates all tables, enums, and RLS policies
 3. Run `database/seed.sql` — inserts demo users, policies, and sample claims
 
-### 3 — Start the backend
+### 3 — Start everything
 
 ```bash
-# Mac/Linux (from project root)
-bash install.sh
-cd backend && source venv/bin/activate
-uvicorn main:app --reload --port 8000 --reload-exclude venv
+docker compose up --build
 ```
 
-```powershell
-# Windows (from project root)
-.\install.ps1
-cd backend; .\venv\Scripts\Activate.ps1
-uvicorn main:app --reload --port 8000 --reload-exclude venv
-```
-
-> Use `install.sh` / `install.ps1` — **not** `pip install -r requirements.txt` directly. The scripts handle a known `grpcio` build issue on Python 3.12+ by installing a pre-built binary wheel first.
-
-### 4 — Start the frontend
-
-```bash
-cd frontend
-cp .env.example .env   # Windows: Copy-Item .env.example .env
-npm install
-npm run dev
-```
-
-### 5 — Open the app
-
-**http://localhost:5173**
-
----
-
-## Docker
-
-The quickest path — especially on Windows:
-
-```bash
-cp .env.example .env   # fill in Supabase + Groq keys first
-docker-compose up --build
-```
+That's it. Docker Desktop pulls, builds, and wires up all services automatically.
 
 | Service | URL |
 |---------|-----|
-| Frontend | http://localhost:5173 |
-| Backend | http://localhost:8000 |
-| n8n | http://localhost:5678 |
+| **Frontend** | http://localhost:80 |
+| **Backend API** | http://localhost:8000 |
+| **API Docs** | http://localhost:8000/docs |
+| **n8n** | http://localhost:5678 |
+
+> **Stop:** `docker compose down`  
+> **Stop + remove volumes:** `docker compose down --volumes`
+
+---
+
+## Individual Services
+
+You can start any service in isolation:
+
+```bash
+docker compose up backend          # FastAPI backend only
+docker compose up frontend         # nginx + React frontend only
+docker compose up n8n              # n8n workflow engine only
+```
+
+---
+
+## Development Mode (Hot-Reload)
+
+For active development with live code reload:
+
+```bash
+docker compose --profile dev up --build
+```
+
+This mounts the `backend/` source directory into the container and runs uvicorn with `--reload`. Frontend changes still require a rebuild (`docker compose up frontend --build`).
+
+---
+
+## Pull from GHCR
+
+The backend image is published to GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/kr1shnasomani/lexora:latest
+# Or a specific version:
+docker pull ghcr.io/kr1shnasomani/lexora:v1.0.0
+```
+
+---
+
+## Project Structure
+
+```
+lexora/
+├── backend/
+│   ├── Dockerfile              # Multi-stage production image
+│   ├── main.py                 # FastAPI entry point
+│   ├── config.py               # Pydantic settings (reads .env)
+│   ├── database.py             # Supabase client singleton
+│   ├── models.py               # Pydantic request/response schemas
+│   ├── state_machine.py        # Claim lifecycle state validation
+│   ├── requirements.txt        # Pinned Python dependencies
+│   ├── routes/                 # claims, customer, dashboard, chat, webhooks
+│   ├── engines/                # policy_engine, fraud_engine, risk_fusion
+│   └── services/audit.py       # Append-only audit event logger
+├── frontend/
+│   ├── Dockerfile              # Multi-stage build → nginx
+│   ├── vite.config.js          # Dev proxy: /api → http://127.0.0.1:8000
+│   ├── tailwind.config.js      # Design system theme
+│   └── src/
+│       ├── contexts/           # AuthContext
+│       ├── hooks/              # useFetch (polling hook)
+│       └── pages/
+│           ├── admin/          # Dashboard, Claims, Analytics, ThreatFeed
+│           └── customer/       # Portal, Policies, Claims, Renewal
+├── database/
+│   ├── schema.sql              # Tables, enums, RLS policies
+│   └── seed.sql                # Demo users, policies, claims
+├── n8n/
+│   └── n8n-workflow.json       # Pre-built Lexora extraction workflow
+├── tests/                      # Integration tests per layer
+├── docs/                       # Architecture docs + AI agent context
+├── docker-compose.yml          # Full stack orchestration
+└── .env.example                # Environment variable template
+```
 
 ---
 
@@ -199,7 +193,7 @@ Enter any email below with any **6-digit OTP** to log in (mock auth).
 
 ## Environment Variables
 
-### Backend (`.env`)
+### Backend (`.env` — root of project)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -207,6 +201,7 @@ Enter any email below with any **6-digit OTP** to log in (mock auth).
 | `SUPABASE_SERVICE_KEY` | ✅ | Service role key (full DB access) |
 | `SUPABASE_ANON_KEY` | ✅ | Anon key (public read) |
 | `GROQ_API_KEY` | ✅ | Chat assistant + audio transcription |
+| `BACKEND_PORT` | — | Host port for backend (default: `8000`) |
 | `OPENROUTER_API_KEY` | optional | n8n LLM extraction fallback |
 | `GOOGLE_GEMINI_API_KEY` | optional | n8n video analysis |
 | `COHERE_API_KEY` | optional | L3 Tier 2 text embeddings |
@@ -216,11 +211,7 @@ Enter any email below with any **6-digit OTP** to log in (mock auth).
 | `FRAUD_LAYER3_ENABLE_QDRANT` | — | `true`/`false` (default `false`) |
 | `FRAUD_LAYER3_ENABLE_NEO4J` | — | `true`/`false` (default `false`) |
 
-### Frontend (`frontend/.env`)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_API_URL` | `http://localhost:8000` | Backend base URL |
+> `VITE_API_URL` and `CORS_ORIGINS` are set automatically by `docker-compose.yml` — you do not need to set them in `.env` for Docker deployments.
 
 ---
 
@@ -259,18 +250,26 @@ submitted → extracting → extracted → policy_evaluating → fraud_checking 
 
 ## CI / CD
 
-| Workflow | Trigger | Jobs |
-|----------|---------|------|
-| `ci.yml` | Push / PR → `main`, `develop` | Lint (ruff) · Layer 2 unit tests · Vite build · Docker build-check |
-| `cd.yml` | Push → `main` | CI gate → build + push images to GHCR |
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci.yml` | Push / PR → `main`, `develop` | **Orchestrator** — calls all check workflows as a gate |
+| `cd.yml` | Push → `main` | **Orchestrator** — CI gate → triggers Docker publish |
+| `lint-backend.yml` | Backend file changes | Ruff linting on `backend/` |
+| `test-backend.yml` | Backend / test changes | Layer 2 unit tests inside Docker container |
+| `build-frontend.yml` | Frontend file changes | Vite production build + artifact upload |
+| `docker-build.yml` | PRs touching Docker files | Build-check both images (no push) |
+| `docker-publish.yml` | Push → `main` | Build + push `ghcr.io/kr1shnasomani/lexora` |
+| `release.yml` | Push tag `v*` / manual | Versioned image push → GitHub Release with assets |
+| `codeql.yml` | Push / PR / weekly | CodeQL Advanced scan (Python, JS/TS, Actions) |
+| `dependabot.yml` | Weekly (Monday) | Automated dependency PRs for pip, npm, Actions |
 
-Images are pushed to `ghcr.io/kr1shnasomani/lexora`. No secrets needed for CI — CD uses the auto-provided `GITHUB_TOKEN`.
+Images are published to `ghcr.io/kr1shnasomani/lexora`. No secrets needed for CI — CD/Release uses the auto-provided `GITHUB_TOKEN`.
 
-**Run tests locally:**
+**Run tests locally (via Docker):**
 
 ```bash
 # Layer 2 — no external services needed
-python tests/test_layer2.py
+docker compose run --rm backend python tests/test_layer2.py
 
 # Layer 3 — requires live Supabase + backend on :8000
 python tests/test_layer3.py
@@ -285,6 +284,8 @@ python tests/test_layer4.py
 
 | Decision | Reason |
 |----------|--------|
+| Docker-first deployment | One command starts the full stack — no local Python/Node setup |
+| Multi-stage Dockerfiles | Small production images; builder installs deps, runner just copies them |
 | Backend owns all state transitions | n8n sends data via webhook; backend manages lifecycle |
 | Audit events are append-only | Every stage logs start/complete/fail — full traceability |
 | Policy rules stored in DB | Versioned JSON DSL — no hardcoded logic in code |
@@ -297,9 +298,8 @@ python tests/test_layer4.py
 
 | Problem | Fix |
 |---------|-----|
-| `grpcio` install fails | Use `bash install.sh` / `.\install.ps1` — not `pip install` directly |
-| PowerShell "scripts disabled" error | Run: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
-| `python` not found on Windows | Reinstall Python and tick **"Add Python to PATH"**, then restart terminal |
+| Port 80 already in use | Set `FRONTEND_PORT=8080` in `.env` and update compose port mapping |
+| Backend not healthy | Check `docker compose logs backend` — usually a missing env var |
+| `grpcio` build takes forever | Rebuild: the multi-stage Dockerfile installs from a binary wheel |
 | Map not showing in Threat Feed | Ensure the backend is running — map pulls from `/api/dashboard/summary` |
-| Frontend CORS errors | Add `http://localhost:5173` to `CORS_ORIGINS` in `.env` |
-
+| Frontend CORS errors | Restart compose — `CORS_ORIGINS` is set automatically by docker-compose |
