@@ -5,10 +5,11 @@ WORKDIR /build
 
 COPY requirements.txt .
 
-# Install grpcio from a pre-built binary wheel first (avoids multi-minute
-# source compilation on Linux) then install the rest of the dependencies.
+# Install all dependencies. Pip will use binary wheels where available
+# (grpcio publishes cp312 wheels for linux_x86_64) and fall back to
+# source only when necessary.
 RUN pip install --no-cache-dir --prefix=/install \
-        grpcio grpcio-tools --only-binary :all: && \
+        grpcio grpcio-tools && \
     pip install --no-cache-dir --prefix=/install \
         -r requirements.txt
 
