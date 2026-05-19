@@ -30,7 +30,7 @@ services:
       - .env
     environment:
       # Override CORS to allow both the nginx container and localhost browser
-      CORS_ORIGINS: "http://localhost,http://localhost:80,http://localhost:5173,http://frontend"
+      CORS_ORIGINS: "http://localhost,http://localhost:80,http://localhost:3001,http://localhost:5173,http://frontend"
       # n8n webhook URL uses Docker service name
       N8N_WEBHOOK_URL: "http://n8n:5678"
     healthcheck:
@@ -54,7 +54,7 @@ services:
     env_file:
       - .env
     environment:
-      CORS_ORIGINS: "http://localhost,http://localhost:80,http://localhost:5173,http://frontend"
+      CORS_ORIGINS: "http://localhost,http://localhost:80,http://localhost:3001,http://localhost:5173,http://frontend"
       N8N_WEBHOOK_URL: "http://n8n:5678"
     volumes:
       # Mount source for hot-reload
