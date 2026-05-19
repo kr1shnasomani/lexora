@@ -12,6 +12,9 @@ concurrency:
   group: cd-${{ github.ref }}
   cancel-in-progress: false   # never cancel an in-flight deploy
 
+permissions:
+  contents: read
+
 jobs:
 
   ci-gate:
