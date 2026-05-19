@@ -1,50 +1,117 @@
-version: '3.8'
+name: lexora
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Lexora — Docker Compose
+#
+# Quick start (production mode):
+#   docker compose up --build
+#
+# Development mode (hot-reload — source mounted into containers):
+#   docker compose --profile dev up --build
+#
+# Individual services:
+#   docker compose up backend          # backend only
+#   docker compose up frontend         # frontend only (uses pre-built image)
+#   docker compose up n8n              # n8n workflow engine only
+# ─────────────────────────────────────────────────────────────────────────────
 
 services:
-  # ── Backend (FastAPI) ──────────────────────────────────────
+
+  # ── Backend (FastAPI) ────────────────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: lexora-backend
+    container_name: lexora-backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     env_file:
       - .env
     environment:
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
-      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-    volumes:
-      - ./backend:/app
+      # Override CORS to allow both the nginx container and localhost browser
+      CORS_ORIGINS: "http://localhost,http://localhost:80,http://localhost:5173,http://frontend"
+      # n8n webhook URL uses Docker service name
+      N8N_WEBHOOK_URL: "http://n8n:5678"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
 
-  # ── Frontend (React + Vite) ────────────────────────────────
+  # ── Backend (dev override — hot-reload) ──────────────────────────────────
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: lexora-backend-dev
+    container_name: lexora-backend-dev
+    profiles: ["dev"]
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      CORS_ORIGINS: "http://localhost,http://localhost:80,http://localhost:5173,http://frontend"
+      N8N_WEBHOOK_URL: "http://n8n:5678"
+    volumes:
+      # Mount source for hot-reload
+      - ./backend:/app
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    restart: unless-stopped
+
+  # ── Frontend (React → nginx) ─────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # VITE_API_URL is baked into the JS bundle at image-build time.
+        # In Docker, the browser calls the backend via the HOST machine's port,
+        # so we use localhost (not the container service name).
+        VITE_API_URL: "http://localhost:${BACKEND_PORT:-8000}"
+    image: lexora-frontend
+    container_name: lexora-frontend
     ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend/src:/app/src
-    environment:
-      - VITE_API_URL=http://localhost:8000
+      - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
-  # ── n8n (Workflow Engine) ──────────────────────────────────
+  # ── n8n (Workflow Engine — Layer 1 AI extraction) ────────────────────────
   n8n:
     image: n8nio/n8n:latest
+    container_name: lexora-n8n
     ports:
       - "5678:5678"
     environment:
-      - N8N_BASIC_AUTH_ACTIVE=false
-      - WEBHOOK_URL=http://localhost:5678
-      - GENERIC_TIMEZONE=Asia/Kolkata
+      N8N_BASIC_AUTH_ACTIVE: "false"
+      # Webhook URL must be reachable from the HOST browser for UI callbacks
+      WEBHOOK_URL: "http://localhost:5678"
+      GENERIC_TIMEZONE: "Asia/Kolkata"
+      # Point n8n's HTTP nodes at the backend service name
+      LEXORA_BACKEND_URL: "http://backend:8000"
     volumes:
       - n8n_data:/home/node/.n8n
+      # Pre-load the Lexora workflow on first boot
+      - ./n8n/n8n-workflow.json:/home/node/.n8n/workflows/lexora-workflow.json:ro
     restart: unless-stopped
 
 volumes:
   n8n_data:
+    name: lexora_n8n_data

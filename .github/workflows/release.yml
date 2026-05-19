@@ -1,0 +1,191 @@
+name: "Release"
+
+# Triggers on version tags (v1.0.0, v1.2.3, etc.) or manual dispatch.
+# Pipeline: CI gate → Docker versioned image push → GitHub Release with assets.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/lexora
+
+jobs:
+
+  # ── 1. CI gate ─────────────────────────────────────────────────────────────
+  ci-gate:
+    name: CI Gate
+    uses: ./.github/workflows/ci.yml
+
+  # ── 2. Build and push versioned image ──────────────────────────────────────
+  build-and-push:
+    name: Docker — Build & Push Release Image
+    runs-on: ubuntu-latest
+    needs: ci-gate
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Resolve version tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ steps.tag.outputs.version }}
+            type=raw,value=latest
+
+      - name: Build and push — lexora (backend)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 3. Create GitHub Release ────────────────────────────────────────────────
+  create-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package release assets
+        run: |
+          cp docker-compose.yml docker-compose.release.yml
+          cp .env.example .env.example.release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.version }}
+          name: "Lexora ${{ steps.tag.outputs.version }}"
+          draft: false
+          prerelease: false
+          files: |
+            docker-compose.release.yml
+            .env.example.release
+          body: |
+            ## Lexora v1.0.0 — Initial Release
+
+            Lexora is an end-to-end AI-powered insurance claims processing platform. This first release ships a fully containerised, production-ready stack deployable with a single Docker command.
+
+            ---
+
+            ### What's Included
+
+            **Backend — FastAPI Claims Engine**
+            - 4-layer AI pipeline: n8n extraction (L1) → policy engine (L2) → fraud detection (L3) → risk fusion (L4)
+            - Fraud engine is 3-tier: exact duplicate check → vector similarity (Cohere + Qdrant) → entity graph analysis (Neo4j)
+            - All tiers are fail-open — system degrades gracefully without optional cloud services
+            - Full audit trail on every claim state transition (append-only `audit_events` table)
+            - Chat assistant powered by Groq (tool-calling + Whisper transcription)
+            - PDF export, analytics, and network graph endpoints
+
+            **Frontend — React 18 + Vite**
+            - Admin portal: claims queue, analytics, fraud threat feed, network graph, audit log, config
+            - Customer portal: policy view, claim filing, status tracking, AI chat, renewal
+            - Built with Tailwind CSS v3, React Router v6
+
+            **Infrastructure**
+            - Fully containerised via Docker Compose — no local Python/Node setup required
+            - Multi-stage Dockerfiles (lean production images, no venv)
+            - n8n workflow engine pre-loaded with the Lexora extraction workflow
+            - Supabase (PostgreSQL) as the primary database with RLS policies
+
+            ---
+
+            ### Quick Start
+
+            ```bash
+            git clone https://github.com/kr1shnasomani/lexora.git
+            cd lexora
+            cp .env.example .env
+            # Fill in: SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY, GROQ_API_KEY
+            docker compose up --build
+            ```
+
+            | Service | URL |
+            |---------|-----|
+            | Frontend | http://localhost:80 |
+            | Backend API | http://localhost:8000 |
+            | API Docs | http://localhost:8000/docs |
+            | n8n | http://localhost:5678 |
+
+            ### Development Mode (hot-reload)
+
+            ```bash
+            docker compose --profile dev up --build
+            ```
+
+            ---
+
+            ### Pull from GHCR
+
+            ```bash
+            docker pull ghcr.io/kr1shnasomani/lexora:v1.0.0
+            ```
+
+            ---
+
+            ### Demo Accounts
+
+            | Role | Email | OTP |
+            |------|-------|-----|
+            | Admin | `vikram.singh@insurer.com` | any 6 digits |
+            | Underwriter | `ananya.rao@insurer.com` | any 6 digits |
+            | Customer | `rahul.mehta@gmail.com` | any 6 digits |
+
+            ---
+
+            ### Attached Assets
+
+            | File | Description |
+            |------|-------------|
+            | `docker-compose.release.yml` | Production compose file |
+            | `.env.example.release` | Environment variable template |

@@ -1,0 +1,31 @@
+name: "Lint — Backend"
+
+# Called by ci.yml orchestrator, or triggered manually.
+# Standalone push/PR triggers removed to avoid duplicate runs
+# when ci.yml is already running as the gate.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff
+        # E501 = line too long, F401 = unused imports (many re-exported from __init__)
+        run: |
+          ruff check backend/ \
+            --ignore E501,F401 \
+            --exclude backend/venv,backend/__pycache__ \
+            --output-format=github

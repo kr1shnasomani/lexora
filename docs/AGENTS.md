@@ -97,7 +97,7 @@ docs/
 | **Audit is immutable** | `audit_events` — no updates, no deletes. |
 | **No hardcoded data** | Frontend computes all values from API responses. Use `.reduce()` not static numbers. |
 | **Customer scoping** | All `/api/customer/*` endpoints require `?email=` query param from `user.email`. |
-| **API base URL** | Frontend uses `import.meta.env.VITE_API_URL \|\| 'http://localhost:8000'`. Never hardcode. |
+| **API base URL** | `VITE_API_URL` is baked into the bundle as a Docker build-arg. For local dev outside Docker, it falls back to `'http://localhost:8000'`. Never hardcode. |
 | **Tailwind v4** | No `tailwind.config.js`. Tokens live in `index.css` `@theme` block. |
 | **Mock auth** | `AuthContext.jsx` + `sessionStorage`. No Supabase JS SDK. `useAuth()` for `{ user, role }`. |
 | **L3 fail-open** | If cloud services fail, fraud engine falls back to local Pass 1. Never blocks pipeline. |
@@ -106,18 +106,31 @@ docs/
 
 ## Demo Accounts & Boot
 ```
-admin@lexora.com          → Admin portal (/admin/*)
-johndoe@example.com       → Customer portal (has demo data)
-customer@demo.com         → Customer portal (empty state)
+vikram.singh@insurer.com  → Admin portal (/admin/*)
+ananya.rao@insurer.com    → Admin portal (Underwriter)
+rahul.mehta@gmail.com     → Customer portal (has demo data)
+priya.s@gmail.com         → Customer portal
 OTP: any 6 digits
 ```
-```bash
-# Backend
-cd backend && source venv/bin/activate
-uvicorn main:app --reload --port 8000 --reload-dir ./ --reload-exclude venv
 
-# Frontend
-cd frontend && npm run dev   # → http://localhost:5173
+**Start (one command):**
+```bash
+docker compose up --build
+# Frontend → http://localhost:80
+# Backend  → http://localhost:8000
+# n8n      → http://localhost:5678
+```
+
+**Dev mode (hot-reload):**
+```bash
+docker compose --profile dev up --build
+```
+
+**Individual services:**
+```bash
+docker compose up backend     # backend only
+docker compose up frontend    # frontend only
+docker compose up n8n         # n8n only
 ```
 
 ---

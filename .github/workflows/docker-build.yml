@@ -1,0 +1,43 @@
+name: "Docker — Build Check"
+
+# Called by ci.yml orchestrator (on PRs), or triggered manually.
+# Standalone push/PR triggers removed to avoid duplicate runs.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  build-backend:
+    name: Backend Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-frontend:
+    name: Frontend Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          build-args: |
+            VITE_API_URL=http://localhost:8000
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
