@@ -17,6 +17,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Link the package to the GitHub repository so it appears under Packages
+LABEL org.opencontainers.image.source="https://github.com/kr1shnasomani/lexora"
+LABEL org.opencontainers.image.description="Lexora — AI-powered Insurance Claims Processing Engine"
+LABEL org.opencontainers.image.licenses="MIT"
+
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
