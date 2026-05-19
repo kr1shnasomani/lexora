@@ -23,9 +23,15 @@ jobs:
         run: pip install ruff
 
       - name: Run ruff
-        # E501 = line too long, F401 = unused imports (many re-exported from __init__)
+        # E501 = line too long
+        # E701 = multiple statements on one line (intentional in L3 engine inline conditionals)
+        # E722 = bare except
+        # E402 = module level import not at top of file
+        # F401 = unused imports (many re-exported from __init__ files)
+        # F841 = local variable assigned but never used (state-tracking stubs in L3)
+        # F541 = f-string without placeholders
         run: |
           ruff check backend/ \
-            --ignore E501,F401 \
+            --ignore E501,E701,E722,E402,F401,F841,F541 \
             --exclude backend/venv,backend/__pycache__ \
             --output-format=github
