@@ -196,7 +196,7 @@ async def run_policy_engine(claim_id: str):
             "current_state_context": json.dumps({"error": str(e), "stage": "policy_engine"}),
         }).eq("id", claim_id).execute()
         log_audit_event(claim_id, "policy_engine", "failed", {"error": str(e)})
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Policy engine failed. Check audit log for details.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -232,7 +232,7 @@ async def run_fraud_engine(claim_id: str):
             "current_state_context": json.dumps({"error": str(e), "stage": "fraud_engine"}),
         }).eq("id", claim_id).execute()
         log_audit_event(claim_id, "fraud_engine", "failed", {"error": str(e)})
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Fraud engine failed. Check audit log for details.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -283,7 +283,7 @@ async def decide_claim(claim_id: str):
             "current_state_context": json.dumps({"error": str(e), "stage": "decision"}),
         }).eq("id", claim_id).execute()
         log_audit_event(claim_id, "decision", "failed", {"error": str(e)})
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Decision engine failed. Check audit log for details.")
 
 
 # ─────────────────────────────────────────────────────────────
