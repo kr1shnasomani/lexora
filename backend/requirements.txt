@@ -29,6 +29,5 @@ neo4j==5.28.1
 # ── PDF Export ────────────────────────────────────────────────
 reportlab==4.4.1
 
-# NOTE: jina package removed — the app uses the Jina REST API
-# directly via HTTP (JINA_API_KEY env var). The jina pip package
-# (600MB framework) is not imported anywhere in the codebase.
+# ── Testing ───────────────────────────────────────────────────
+pytest==8.3.5
