@@ -1,6 +1,7 @@
 """Lexora Backend — Customer Portal APIs"""
 from fastapi import APIRouter, HTTPException, Query
 from database import get_supabase
+import json
 
 router = APIRouter(prefix="/customer", tags=["Customer"])
 
