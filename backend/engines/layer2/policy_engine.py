@@ -188,21 +188,15 @@ def _load_documents(db, claim_id: str) -> list[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _normalize_rulepack(raw: dict) -> dict:
-    """Translate the DB rules_definition JSONB schema into the internal engine format.
+    """Translate rules_definition JSONB into the internal engine format.
 
-    DB format (actual):
-        coverage.incident_type_to_category  → category_mapping
-        financials.copay_percent.{cat}       → coverage_categories.{cat}.copay_percentage
-        financials.annual_limit.{cat}        → coverage_categories.{cat}.annual_limit
-        financials.per_incident_limit.{cat}  → coverage_categories.{cat}.per_incident_limit
-        financials.deductible.{cat}          → coverage_categories.{cat}.deductible
-        eligibility.waiting_period_days.{cat}→ coverage_categories.{cat}.waiting_period_days
-        exclusions.hard[].keywords           → coverage_categories.{cat}.exclusions
+    Supports two input shapes:
+    1. DB format  — has coverage.incident_type_to_category / financials / eligibility keys
+    2. Legacy/test format — has rules[] array + limits{} dict (used by test harness)
     """
-    # If already in legacy format (has coverage_categories key), pass through
+    # Already normalized — pass through
     if "coverage_categories" in raw:
-        if "category_mapping" not in raw and "category_mapping" not in raw:
-            raw.setdefault("category_mapping", {})
+        raw.setdefault("category_mapping", {})
         return raw
 
     cov = raw.get("coverage", {})
@@ -210,11 +204,9 @@ def _normalize_rulepack(raw: dict) -> dict:
     elig = raw.get("eligibility", {})
     excl = raw.get("exclusions", {})
 
-    # Build category_mapping from coverage.incident_type_to_category
     category_mapping = cov.get("incident_type_to_category", {})
     supported = cov.get("supported_categories", [])
 
-    # Gather all exclusion keywords across hard exclusions
     hard_excl_keywords: list[str] = []
     for rule in excl.get("hard", []):
         hard_excl_keywords.extend(rule.get("keywords", []))
@@ -224,39 +216,112 @@ def _normalize_rulepack(raw: dict) -> dict:
     contestability_days = elig.get("contestability_days", 0) or 0
     max_submission_days = elig.get("max_submission_days_from_incident", 365) or 365
 
-    # high_amount_threshold: pull from routing config or rules list
     routing = raw.get("routing", {})
     high_amount_threshold = routing.get("fast_track", {}).get("max_amount", 0) or 0
-    # Also try to pull from amount_outlier_review rule params
     for rule in raw.get("rules", []):
         if rule.get("type") == "amount_outlier_review":
             high_amount_threshold = rule.get("params", {}).get("high_amount_threshold", high_amount_threshold)
 
-    for cat in (supported or list({v for v in category_mapping.values() if v})):
-        copay_pct = fin.get("copay_percent", {}).get(cat, 0) or 0
-        annual_lim = fin.get("annual_limit", {}).get(cat)  # None means unlimited
-        per_inc_lim = fin.get("per_incident_limit", {}).get(cat)
-        deductible = fin.get("deductible", {}).get(cat, 0) or 0
-        waiting = elig.get("waiting_period_days", {}).get(cat, 0) or 0
+    if supported or category_mapping:
+        # ── DB format path ────────────────────────────────────────────────
+        for cat in (supported or list({v for v in category_mapping.values() if v})):
+            copay_pct = fin.get("copay_percent", {}).get(cat, 0) or 0
+            annual_lim = fin.get("annual_limit", {}).get(cat)
+            per_inc_lim = fin.get("per_incident_limit", {}).get(cat)
+            deductible = fin.get("deductible", {}).get(cat, 0) or 0
+            waiting = elig.get("waiting_period_days", {}).get(cat, 0) or 0
 
-        coverage_categories[cat] = {
+            coverage_categories[cat] = {
+                "covered": True,
+                "copay_percentage": float(copay_pct),
+                "annual_limit": float(annual_lim) if annual_lim is not None else 0.0,
+                "per_incident_limit": float(per_inc_lim) if per_inc_lim is not None else 0.0,
+                "deductible": float(deductible),
+                "waiting_period_days": int(waiting),
+                "contestability_days": int(contestability_days),
+                "max_submission_days_from_incident": int(max_submission_days),
+                "high_amount_threshold": float(high_amount_threshold) if high_amount_threshold else 0.0,
+                "exclusions": hard_excl_keywords,
+                "soft_exclusion_rules": soft_excl_flags,
+            }
+    else:
+        # ── Legacy / test format path (rules[] + limits{}) ────────────────
+        rules_list = raw.get("rules", [])
+        limits = raw.get("limits", {})
+
+        waiting_days = 0
+        hard_kws: list[str] = []
+        soft_kws: list[str] = []
+        copay_pct = float(limits.get("copay_percent", 0) or 0)
+        deductible = float(limits.get("deductible", 0) or 0)
+        per_inc_lim = float(limits.get("per_incident_limit", 0) or 0)
+        annual_lim = float(limits.get("annual_limit", 0) or 0)
+
+        suicide_excl_keywords: list[str] = []
+        suicide_excl_within_days: int = 0
+        outlier_threshold: float = 0.0
+        contestability_days_leg: int = 0
+
+        required_doc_specs: list[dict] = []
+
+        for rule in rules_list:
+            rtype = rule.get("type", "")
+            if rtype == "waiting_period":
+                waiting_days = int(rule.get("waiting_period_days", 0))
+            elif rtype == "exclusions_keyword":
+                hard_kws.extend(rule.get("hard_exclusions", []))
+                soft_kws.extend(rule.get("soft_exclusions", []))
+            elif rtype == "copay_apply":
+                copay_pct = float(rule.get("copay_percent", copay_pct))
+            elif rtype == "deductible_apply":
+                deductible = float(rule.get("deductible", deductible))
+            elif rtype == "per_incident_cap":
+                per_inc_lim = float(rule.get("per_incident_limit", per_inc_lim))
+            elif rtype == "suicide_exclusion_within_days":
+                suicide_excl_keywords = [k.lower() for k in rule.get("keywords", ["suicide"])]
+                suicide_excl_within_days = int(rule.get("within_days", 365))
+            elif rtype == "amount_outlier_review":
+                outlier_threshold = float(rule.get("outlier_threshold", 0))
+            elif rtype == "contestability_period_review":
+                contestability_days_leg = int(rule.get("contestability_days", 0))
+            elif rtype == "required_docs":
+                required_doc_specs.extend(rule.get("required_docs", []))
+
+        # Use outlier_threshold for high-amount review (not fast-track max)
+        eff_high_threshold = outlier_threshold if outlier_threshold else 0.0
+
+        soft_excl_rules = [
+            {"rule_id": "SOFT_EXCL",
+             "message": f"Soft exclusion keyword '{kw}' matched.",
+             "keywords": [kw]}
+            for kw in soft_kws
+        ]
+
+        # Single catch-all category so any incident_type maps to it.
+        # The category_mapping uses "other" as the universal fallback key so
+        # _classify_incident always resolves to "default".
+        coverage_categories["default"] = {
             "covered": True,
-            "copay_percentage": float(copay_pct),
-            "annual_limit": float(annual_lim) if annual_lim is not None else 0.0,
-            "per_incident_limit": float(per_inc_lim) if per_inc_lim is not None else 0.0,
-            "deductible": float(deductible),
-            "waiting_period_days": int(waiting),
-            "contestability_days": int(contestability_days),
-            "max_submission_days_from_incident": int(max_submission_days),
-            "high_amount_threshold": float(high_amount_threshold) if high_amount_threshold else 0.0,
-            # Exclusion keyword lists for hard-reject checks
-            "exclusions": hard_excl_keywords,
-            # Full soft-exclusion rule objects for review routing
-            "soft_exclusion_rules": soft_excl_flags,
+            "copay_percentage": copay_pct,
+            "annual_limit": annual_lim,
+            "per_incident_limit": per_inc_lim,
+            "deductible": deductible,
+            "waiting_period_days": waiting_days,
+            "contestability_days": contestability_days_leg,
+            "max_submission_days_from_incident": 365,
+            "high_amount_threshold": eff_high_threshold,
+            "exclusions": hard_kws,
+            "soft_exclusion_rules": soft_excl_rules,
+            # Legacy-format extras used by _run_core_checks
+            "_suicide_excl_keywords": suicide_excl_keywords,
+            "_suicide_excl_within_days": suicide_excl_within_days,
+            "_required_doc_specs": required_doc_specs,
         }
+        # "other" key is the universal fallback in _classify_incident
+        category_mapping = {"other": "default"}
 
     return {
-        **raw,  # preserve all original keys (rules[], routing, documents, etc.)
+        **raw,
         "category_mapping": category_mapping,
         "coverage_categories": coverage_categories,
     }
@@ -461,7 +526,24 @@ def _run_core_checks(
                 results.append(_review(rule_id, msg))
                 break  # one match per rule is enough
 
-    # 6) Contestability check (life policies)
+    # 6) Suicide / self-harm exclusion within N days of policy start (life policies)
+    suicide_kws = category_config.get("_suicide_excl_keywords", [])
+    suicide_within = int(category_config.get("_suicide_excl_within_days", 0))
+    if suicide_kws and suicide_within and start and incident:
+        for kw in suicide_kws:
+            if kw in description:
+                cutoff = start + timedelta(days=suicide_within)
+                if incident <= cutoff:
+                    results.append(_fail(
+                        "SUICIDE_EXCLUSION",
+                        f"Claim description contains '{kw}' and incident is within the "
+                        f"{suicide_within}-day suicide exclusion period "
+                        f"(policy start {start}, cutoff {cutoff})."
+                    ))
+                    return results  # hard stop
+                break
+
+    # 6b) Contestability check (life policies)
     contestability_days = category_config.get("contestability_days", 0)
     if contestability_days and start and incident:
         contestability_end = start + timedelta(days=contestability_days)
@@ -505,13 +587,8 @@ def _run_core_checks(
     # 9) Required documents check (R_REQUIRED_DOCS)
     docs_config = rulepack.get("documents", {})
     coverage_category = context.get("coverage_category", "")
-    required_doc_types: list[str] = (
-        docs_config.get("required_by_category", {}).get(coverage_category, [])
-    )
-    filename_hints: dict[str, list[str]] = docs_config.get("filename_hints", {})
-    uploaded_docs: list[dict] = context.get("documents", [])
 
-    # Build a flat set of uploaded filenames/doc_types for matching
+    uploaded_docs: list[dict] = context.get("documents", [])
     uploaded_names: list[str] = []
     for d in uploaded_docs:
         fname = (d.get("file_name") or d.get("filename") or d.get("name") or "").lower()
@@ -522,21 +599,38 @@ def _run_core_checks(
             uploaded_names.append(doc_type)
 
     missing_docs: list[str] = []
-    for req_doc in required_doc_types:
-        # Generate clean hints (no spaces, no underscores)
+
+    # DB format: documents.required_by_category + filename_hints
+    required_doc_types_db: list[str] = (
+        docs_config.get("required_by_category", {}).get(coverage_category, [])
+    )
+    filename_hints: dict[str, list[str]] = docs_config.get("filename_hints", {})
+
+    for req_doc in required_doc_types_db:
         raw_hints = filename_hints.get(req_doc, [req_doc])
         clean_hints = [h.lower().replace("_", "").replace(" ", "") for h in raw_hints]
-        
-        # Check if any clean hint is in any uploaded name
-        matched = False
-        for name in uploaded_names:
-            clean_name = name.replace("_", "").replace(" ", "")
-            if any(hint in clean_name for hint in clean_hints):
-                matched = True
-                break
-                
+        matched = any(
+            any(hint in name.replace("_", "").replace(" ", "") for hint in clean_hints)
+            for name in uploaded_names
+        )
         if not matched:
             missing_docs.append(req_doc)
+
+    # Legacy/test format: rules[].type==required_docs stored in _required_doc_specs
+    legacy_doc_specs: list[dict] = category_config.get("_required_doc_specs", [])
+    for spec in legacy_doc_specs:
+        if not spec.get("required", True):
+            continue
+        doc_name = spec.get("type", "doc")
+        hints = [h.lower() for h in spec.get("filename_hints", [doc_name])]
+        clean_hints = [h.replace("_", "").replace(" ", "") for h in hints]
+        matched = any(
+            any(hint in name.replace("_", "").replace(" ", "") for hint in clean_hints)
+            for name in uploaded_names
+        )
+        if not matched:
+            missing_docs.append(doc_name)
+            filename_hints[doc_name] = hints  # for the error message below
 
     if missing_docs:
         for md in missing_docs:
@@ -546,10 +640,11 @@ def _run_core_checks(
                 f"Please submit: {', '.join(h for h in filename_hints.get(md, [md])[:3])}."
             ))
         context["doc_gaps_count"] = len(missing_docs)
-    elif required_doc_types:
+    elif required_doc_types_db or legacy_doc_specs:
+        total_required = len(required_doc_types_db) + len(legacy_doc_specs)
         results.append(_ok(
             "REQUIRED_DOCS_PRESENT",
-            f"All {len(required_doc_types)} required document(s) for category "
+            f"All {total_required} required document(s) for category "
             f"'{coverage_category}' are present."
         ))
 

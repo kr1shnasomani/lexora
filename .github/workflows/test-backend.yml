@@ -33,6 +33,7 @@ jobs:
             -e SUPABASE_URL=https://placeholder.supabase.co \
             -e SUPABASE_SERVICE_KEY=placeholder \
             -e GROQ_API_KEY=placeholder \
+            -e PYTHONPATH=/app \
             -v ${{ github.workspace }}/tests:/app/tests:ro \
             lexora-backend:ci \
-            python tests/test_layer2.py
+            python -m pytest tests/test_layer2.py -v
