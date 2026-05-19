@@ -157,7 +157,7 @@ async def get_document_url(claim_id: str, doc_id: str):
             public_url = db.storage.from_("claim_documents").get_public_url(storage_key)
             return {"url": public_url}
         except:
-            raise HTTPException(status_code=500, detail=f"Failed to fetch document: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to fetch document URL. Please try again.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -508,7 +508,7 @@ async def run_layer2_batch():
             evaluate_policy(claim_id)
             success_ids.append(claim_id)
         except Exception as exc:
-            failed_entries.append({"claim_id": claim_id, "error": str(exc)})
+            failed_entries.append({"claim_id": claim_id, "error": "Policy evaluation failed — see audit log"})
 
     return {
         "processed_count": len(pending),
@@ -547,6 +547,6 @@ async def process_pending():
             logs.append({"claim_id": claim_id, "status": "success", "new_status": res.get("new_status")})
         except Exception as e:
             # Catch errors to permit other claims to finish
-            logs.append({"claim_id": claim_id, "status": "error", "error": str(e)})
+            logs.append({"claim_id": claim_id, "status": "error", "error": "Pipeline failed — see audit log"})
 
     return {"processed_count": len(pending), "logs": logs}
