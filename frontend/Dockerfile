@@ -21,7 +21,7 @@ FROM nginx:1.27-alpine
 # Copy compiled assets
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# nginx config: SPA routing + gzip + asset caching
+# nginx config: SPA routing + /api/ reverse proxy + gzip + asset caching
 RUN printf '\
 server {\n\
     listen 80;\n\
@@ -31,6 +31,17 @@ server {\n\
     gzip on;\n\
     gzip_types text/plain text/css application/json application/javascript\n\
                text/xml application/xml application/xml+rss text/javascript;\n\
+\n\
+    # Proxy /api/ -> backend container\n\
+    location /api/ {\n\
+        proxy_pass         http://backend:8000/api/;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header   Host              $host;\n\
+        proxy_set_header   X-Real-IP         $remote_addr;\n\
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;\n\
+        proxy_set_header   X-Forwarded-Proto $scheme;\n\
+        proxy_read_timeout 60s;\n\
+    }\n\
 \n\
     # Long-lived cache for hashed assets\n\
     location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {\n\
