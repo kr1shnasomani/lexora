@@ -22,7 +22,7 @@ python-dateutil==2.9.0.post0
 networkx==3.4.2
 
 # ── AI / Vector / Graph ───────────────────────────────────────
-cohere==5.15.0
+cohere==7.0.0
 qdrant-client==1.14.2
 neo4j==5.28.1
 
