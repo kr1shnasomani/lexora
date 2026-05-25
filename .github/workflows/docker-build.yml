@@ -20,7 +20,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Build backend image (no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           push: false
@@ -36,7 +36,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Build frontend image (no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           push: false

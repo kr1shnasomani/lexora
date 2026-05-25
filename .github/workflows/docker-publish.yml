@@ -43,7 +43,7 @@ jobs:
       # The single published package is the backend image tagged as "lexora".
       # This is the only package that appears under the repository on GitHub.
       - name: Build and push — lexora (backend)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           push: true
@@ -53,7 +53,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build frontend (validate only — not published to GHCR)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           push: false
