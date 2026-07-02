@@ -28,6 +28,8 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "neo4j"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "reportlab"
+        update-types: ["version-update:semver-major"]
 
   # ── npm (frontend) ────────────────────────────────────────────
   - package-ecosystem: "npm"
