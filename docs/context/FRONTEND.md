@@ -2,18 +2,19 @@
 
 ## Auth Model
 - **No real auth**. Mock only via `frontend/src/contexts/AuthContext.jsx`.
-- Hook: `const { user, role, logout } = useAuth()` — available everywhere via Context.
-- Session stored in `sessionStorage`. Cleared on tab close.
+- Hook: `const { user, role, signOut } = useAuth()` — available everywhere via Context.
+- Session stored in `localStorage` (persists across tab/browser close). Key: `lexora_demo_session`.
 - `user.email` used to scope customer API calls.
 - Demo accounts:
-  - `admin@lexora.com` → admin portal (`/admin/*`)
-  - `johndoe@example.com` → customer portal (has demo data)
-  - `customer@demo.com` → customer portal (empty state)
+  - `vikram.singh@insurer.com` → admin portal (`/admin/*`)
+  - `ananya.rao@insurer.com` → admin portal (Underwriter)
+  - `rahul.mehta@gmail.com` → customer portal (has demo data)
+  - `priya.s@gmail.com` → customer portal
 - OTP: any 6 digits accepted.
 
 ## Routes (`App.jsx`)
-- `/` → `LoginPage`
-- `/select` → `ModeSelectionPage`
+- `/` → `ModeSelectionPage`
+- `/login` → `LoginPage`
 - `/admin/*` → protected, role=admin
 - `/customer/*` → protected, role=customer
 
@@ -60,19 +61,32 @@
 
 Both use `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/chat/...`
 
-## Design Tokens (from `frontend/src/index.css`)
-```css
-/* @theme block — Tailwind v4 custom properties */
---background-dark:   #0a0a0f   /* page bg */
---surface-dark:      #111118   /* card/panel */
---border-dark:       #1e1e2e   /* borders */
---brand-purple:      #7c3aed   /* primary accent */
---brand-purple-light:#a855f7
---text-primary:      #f1f5f9
---text-secondary:    #94a3b8
---text-muted:        #475569
+## Design Tokens (from `frontend/tailwind.config.js` — `theme.extend.colors`)
+```js
+// Brand
+"primary":              "#e83049"   // main accent (red)
+"primary-dark":         "#b01d32"
+"primary-light":        "#ff5c72"
+"primary-hover":        "#d02038"
+// Backgrounds
+"background-dark":      "#0A0A0C"   // page bg
+"background-dark-alt":  "#0f0f11"
+// Surfaces
+"surface-dark":         "#131316"   // card/panel (admin)
+"surface-dark-customer":"#18181b"   // card/panel (customer)
+"surface-dark-lighter": "#2a1d20"
+// Borders
+"border-dark":          "#27272a"
+"surface-border":       "#27272a"
+// Text
+"text-muted":           "#b89da1"
+// Status
+"success":              "#10b981"
+"warning":              "#fbbf24"
 ```
-Use Tailwind utility classes like `bg-background-dark`, `text-brand-purple`, etc.
+Use Tailwind utility classes like `bg-background-dark`, `text-primary`, `border-border-dark`, etc.
+
+Font: `Space Grotesk` (display/body/sans) + `JetBrains Mono` (mono) — configured in `theme.extend.fontFamily`.
 
 ## Frontend Rules
 - **No hardcoded data** — all numbers come from API endpoints.

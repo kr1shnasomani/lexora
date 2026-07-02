@@ -28,7 +28,7 @@
 
 **DB writes:**
 - `claims`: creates row with `status = extracted` (or `under_review` if `needs_review=true`)
-- `audit_events`: `stage="layer1"`, `action="completed"`, fields_extracted count, confidence
+- `audit_events`: `stage="layer1"`, `event_type="completed"`, fields_extracted count, confidence
 
 **Post-write:** Fires `BackgroundTask → trigger_pipeline(claim_id)` → chains L2 → L3 → L4.
 

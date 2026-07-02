@@ -22,6 +22,12 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # Ignore MAJOR bumps that require intentional migration work
+    ignore:
+      - dependency-name: "cohere"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "neo4j"
+        update-types: ["version-update:semver-major"]
 
   # ── npm (frontend) ────────────────────────────────────────────
   - package-ecosystem: "npm"
@@ -40,6 +46,20 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # Ignore MAJOR bumps that require intentional migration work
+    ignore:
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-router"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-router-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-zoom-pan-pinch"
+        update-types: ["version-update:semver-major"]
 
   # ── GitHub Actions ────────────────────────────────────────────
   - package-ecosystem: "github-actions"
@@ -50,10 +70,13 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    # Group all action updates (including major) into one PR
+    # Action major bumps are safe — they're just tag changes, not breaking API changes
     groups:
       actions-deps:
         patterns:
           - "*"
         update-types:
+          - "major"
           - "minor"
           - "patch"
