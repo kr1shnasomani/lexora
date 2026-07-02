@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../lexora-logo.png" alt="Lexora Logo" width="100" />
+  <img src="frontend/public/lexora-logo.png" alt="Lexora Logo" width="100" />
 </p>
 
 # Lexora — Agent Quickstart
@@ -55,12 +55,12 @@ backend/
     run_layer3_batch.py
 
 frontend/src/
-  App.jsx              Router (/ /select /admin/* /customer/*)
-  index.css            Tailwind v4 @theme tokens
+  App.jsx              Router (/ /login /admin/* /customer/*)
+  index.css            Tailwind v3 base/components/utilities directives
   contexts/
-    AuthContext.jsx    Mock auth (sessionStorage), useAuth() hook
+    AuthContext.jsx    Mock auth (localStorage), useAuth() hook
   hooks/
-    useFetch.js        GET hook → { data, loading, error }
+    useFetch.js        GET hook → { data, loading, error, refetch }
   pages/admin/         DashboardPage ClaimsQueuePage AnalyticsPage NetworkGraphPage
                        ThreatFeedPage AuditLogPage ConfigPage
   pages/customer/      HomePage PoliciesPage PolicyDetailPage ClaimsPage ClaimStatus
@@ -75,7 +75,6 @@ database/
 
 docs/
   SOLUTION.md          Full architecture + Mermaid diagrams (deep dives)
-  AGENTS.md            This file
   context/
     STACK.md           Tech stack, env vars, ports, boot commands
     PIPELINE.md        Claim lifecycle, state machine, sweeper, n8n
@@ -98,8 +97,8 @@ docs/
 | **No hardcoded data** | Frontend computes all values from API responses. Use `.reduce()` not static numbers. |
 | **Customer scoping** | All `/api/customer/*` endpoints require `?email=` query param from `user.email`. |
 | **API base URL** | `VITE_API_URL` is baked into the bundle as a Docker build-arg. For local dev outside Docker, it falls back to `'http://localhost:8000'`. Never hardcode. |
-| **Tailwind v4** | No `tailwind.config.js`. Tokens live in `index.css` `@theme` block. |
-| **Mock auth** | `AuthContext.jsx` + `sessionStorage`. No Supabase JS SDK. `useAuth()` for `{ user, role }`. |
+| **Tailwind v3** | Config in `tailwind.config.js`. Custom tokens (colors, fonts, shadows) live there under `theme.extend`. `index.css` uses `@tailwind base/components/utilities` directives. |
+| **Mock auth** | `AuthContext.jsx` + `localStorage` (key: `lexora_demo_session`). No Supabase JS SDK. `useAuth()` for `{ user, role }`. |
 | **L3 fail-open** | If cloud services fail, fraud engine falls back to local Pass 1. Never blocks pipeline. |
 
 ---
@@ -116,7 +115,7 @@ OTP: any 6 digits
 **Start (one command):**
 ```bash
 docker compose up --build
-# Frontend → http://localhost:80
+# Frontend → http://localhost:3001
 # Backend  → http://localhost:8000
 # n8n      → http://localhost:5678
 ```

@@ -6,10 +6,10 @@
 | Framework | React 18 + Vite |
 | Routing | React Router v6 — `/admin/*` and `/customer/*` |
 | Styling | **Tailwind CSS v3** — `@tailwind base/components/utilities` directives in `index.css`. Config in `tailwind.config.js` with custom `colors.primary`, `colors.surface-dark`, etc. |
-| Icons | Lucide React |
+| Icons | Inline SVGs (no icon library installed) |
 | API calls | `useFetch` hook (`frontend/src/hooks/useFetch.js`) for GET; `fetch()` directly for POST/PUT |
 | Base URL | `VITE_API_URL` — baked into the bundle as a Docker build-arg. Falls back to `'http://localhost:8000'` for local dev outside Docker. |
-| Auth | Mock only — `AuthContext.jsx` using `sessionStorage`. No Supabase JS SDK in use. |
+| Auth | Mock only — `AuthContext.jsx` using `localStorage` (key: `lexora_demo_session`). No Supabase JS SDK in use. |
 
 ## Backend
 | Concern | Detail |
@@ -45,7 +45,7 @@ Default: all `false` (Pass 1 / local-only mode).
 ## Ports (Docker)
 | Service | Host Port |
 |---|---|
-| React frontend (nginx) | `80` |
+| React frontend (nginx) | `3001` |
 | FastAPI backend | `8000` |
 | n8n | `5678` |
 

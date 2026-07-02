@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../lexora-logo.png" alt="Lexora Logo" width="100" />
+  <img src="../frontend/public/lexora-logo.png" alt="Lexora Logo" width="100" />
 </p>
 
 # LEXORA: Neuro-Symbolic Claims Intelligence Platform

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="lexora-logo.png" alt="Lexora Logo" width="120" />
+  <img src="frontend/public/lexora-logo.png" alt="Lexora Logo" width="120" />
 </p>
 
 <h1 align="center">Lexora</h1>
@@ -17,8 +17,8 @@
   </a>
   <img src="https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white" alt="Python 3.12" />
   <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white" alt="React 18" />
-  <img src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white" alt="Vite 5" />
+  <img src="https://img.shields.io/badge/FastAPI-0.138-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white" alt="Vite 8" />
   <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
 </p>
@@ -94,7 +94,7 @@ That's it. Docker Desktop pulls, builds, and wires up all services automatically
 
 | Service | URL |
 |---------|-----|
-| **Frontend** | http://localhost:80 |
+| **Frontend** | http://localhost:3001 |
 | **Backend API** | http://localhost:8000 |
 | **API Docs** | http://localhost:8000/docs |
 | **n8n** | http://localhost:5678 |

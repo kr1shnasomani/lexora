@@ -23,17 +23,25 @@ jobs:
   lint-backend:
     name: Lint — Backend
     uses: ./.github/workflows/lint-backend.yml
+    permissions:
+      contents: read
 
   test-backend:
     name: Test — Backend
     uses: ./.github/workflows/test-backend.yml
+    permissions:
+      contents: read
 
   build-frontend:
     name: Build — Frontend
     uses: ./.github/workflows/build-frontend.yml
+    permissions:
+      contents: read
 
   # Docker build-check only runs on pull requests — wasteful to run on every push.
   docker-build:
     name: Docker — Build Check
     if: github.event_name == 'pull_request'
     uses: ./.github/workflows/docker-build.yml
+    permissions:
+      contents: read

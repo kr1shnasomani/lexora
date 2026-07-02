@@ -20,6 +20,8 @@ jobs:
   ci-gate:
     name: CI Gate
     uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
 
   docker-publish:
     name: Docker — Publish
