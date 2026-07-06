@@ -1,6 +1,6 @@
 # ── Core API ──────────────────────────────────────────────────
 fastapi==0.139.0
-uvicorn[standard]==0.49.0
+uvicorn[standard]==0.50.1
 pydantic==2.13.4
 pydantic-settings==2.14.2
 python-multipart==0.0.32
@@ -12,12 +12,12 @@ supabase==2.31.0
 httpx==0.28.1
 
 # ── gRPC (required by supabase / qdrant) ──────────────────────
-grpcio==1.81.1
-grpcio-tools==1.81.1
+grpcio==1.82.0
+grpcio-tools==1.82.0
 
 # ── Utilities ─────────────────────────────────────────────────
 requests==2.34.2
-numpy==2.5.0
+numpy==2.5.1
 python-dateutil==2.9.0.post0
 networkx==3.6.1
 
@@ -27,7 +27,7 @@ qdrant-client==1.18.0
 neo4j==5.28.4
 
 # ── PDF Export ────────────────────────────────────────────────
-reportlab==4.4.1
+reportlab==4.5.1
 
 # ── Testing ───────────────────────────────────────────────────
 pytest==9.1.1
