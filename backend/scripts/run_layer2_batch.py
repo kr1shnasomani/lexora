@@ -12,8 +12,8 @@ runs evaluate_policy() on each, and prints a summary.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # ── Path resolution ──────────────────────────────────────────────────────────
 _this_file = Path(__file__).resolve()
@@ -21,8 +21,9 @@ _backend_dir = _this_file.parent.parent
 if str(_backend_dir) not in sys.path:
     sys.path.insert(0, str(_backend_dir))
 
-from database import get_supabase
 from engines.layer2 import evaluate_policy
+
+from database import get_supabase
 
 
 def run_pending() -> dict:

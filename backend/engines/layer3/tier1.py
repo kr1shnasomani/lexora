@@ -16,8 +16,9 @@ Returns:
     }
 """
 import math
-from datetime import datetime, timedelta, date
-from engines.layer3.canonical import normalize_phone, normalize_invoice
+from datetime import date, datetime, timedelta
+
+from engines.layer3.canonical import normalize_invoice, normalize_phone
 
 
 def run_tier1(db, claim: dict, policy: dict | None, cfg: dict) -> dict:

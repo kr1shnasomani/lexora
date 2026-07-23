@@ -2,10 +2,10 @@
 Handles Claim and Entity nodes, relationship upserts, and multi-hop traversal.
 """
 import time
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from neo4j import GraphDatabase, Driver
+    from neo4j import Driver, GraphDatabase
     NEO4J_AVAILABLE = True
 except ImportError:
     NEO4J_AVAILABLE = False
@@ -14,7 +14,7 @@ except ImportError:
 class Neo4jConnector:
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        self.driver: Optional['Driver'] = None
+        self.driver: Driver | None = None
         
         uri = cfg.get("neo4j_uri")
         user = cfg.get("neo4j_user")
@@ -40,7 +40,7 @@ class Neo4jConnector:
         if self.driver:
             self.driver.close()
 
-    def upsert_claim_graph(self, claim_id: str, entities: List[dict]) -> Tuple[bool, Optional[str], int]:
+    def upsert_claim_graph(self, claim_id: str, entities: list[dict]) -> tuple[bool, str | None, int]:
         """
         Upsert a claim node and its connected entities.
         entities: list of {"type": "provider", "value": "john doe"}
@@ -69,9 +69,9 @@ class Neo4jConnector:
             return True, None, elapsed
         except Exception as e:
             elapsed = int(time.time() * 1000) - start_ms
-            return False, f"Neo4j Upsert Error: {str(e)}", elapsed
+            return False, f"Neo4j Upsert Error: {e!s}", elapsed
 
-    def find_claim_neighborhood(self, claim_id: str, max_hops: int = 2) -> Tuple[dict, Optional[str], int]:
+    def find_claim_neighborhood(self, claim_id: str, max_hops: int = 2) -> tuple[dict, str | None, int]:
         """
         Find neighborhood for claim. Returns component size, top hub entities, and edges excerpt.
         We do a bounded variable length traversal.
@@ -143,4 +143,4 @@ class Neo4jConnector:
             
         except Exception as e:
             elapsed = int(time.time() * 1000) - start_ms
-            return {}, f"Neo4j Query Error: {str(e)}", elapsed
+            return {}, f"Neo4j Query Error: {e!s}", elapsed

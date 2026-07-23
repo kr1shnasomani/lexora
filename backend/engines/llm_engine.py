@@ -1,6 +1,8 @@
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 import requests
 from config import get_settings
+
 
 class GroqEngine:
     """Lightweight wrapper for Groq LLM API"""
@@ -10,7 +12,7 @@ class GroqEngine:
         self.base_url = "https://api.groq.com/openai/v1/chat/completions"
         self.model = "qwen/qwen3-32b" # Requested Qwen model
         
-    def generate(self, messages: List[Dict[str, str]], tools: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def generate(self, messages: list[dict[str, str]], tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         """
         Sends context/messages to Groq and optionally provides function tools.
         """

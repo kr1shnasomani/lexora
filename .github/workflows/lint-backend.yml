@@ -23,7 +23,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install ruff
-        run: pip install ruff
+        # Pinned: ruff's default rule set changes between releases, so an
+        # unpinned install can start failing CI on pre-existing code with no
+        # actual diff to blame. Bump deliberately, not implicitly.
+        run: pip install ruff==0.16.0
 
       - name: Run ruff
         # E501 = line too long
@@ -33,8 +36,17 @@ jobs:
         # F401 = unused imports (many re-exported from __init__ files)
         # F841 = local variable assigned but never used (state-tracking stubs in L3)
         # F541 = f-string without placeholders
+        # BLE001/S110 = broad except/try-except-pass: the fraud engine is deliberately
+        #   fail-open (see README "Key Design Decisions") — external service calls
+        #   (Qdrant/Neo4j/Jina/Cohere) must degrade to a local fallback, not raise
+        # RUF059 = unused unpacked tuple element (same state-tracking-stub pattern as F841)
+        # DTZ003/DTZ007/DTZ011 = naive datetime usage, pervasive pre-existing pattern;
+        #   fixing requires a coordinated pass across claim timestamp handling, tracked
+        #   separately rather than papered over here
+        # UP035 = deprecated typing.Dict/List/Tuple imports, cosmetic modernization
+        # B008 = FastAPI's File(...)/Form(...) DI pattern requires call-as-default
         run: |
           ruff check backend/ \
-            --ignore E501,E701,E722,E402,F401,F841,F541 \
+            --ignore E501,E701,E722,E402,F401,F841,F541,BLE001,S110,RUF059,DTZ003,DTZ007,DTZ011,UP035,B008 \
             --exclude backend/venv,backend/__pycache__ \
             --output-format=github

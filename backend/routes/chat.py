@@ -1,26 +1,28 @@
 import uuid
-from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
-from pydantic import BaseModel
-from database import get_supabase
+from typing import Any, Dict, List, Optional
+
 from engines.llm_engine import GroqEngine
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
+
+from database import get_supabase
 
 router = APIRouter()
 
 # --- Models ---
 class ChatMessageParams(BaseModel):
-    session_id: Optional[str] = None
+    session_id: str | None = None
     message: str
-    ui_context: Optional[Dict[str, Any]] = None
+    ui_context: dict[str, Any] | None = None
 
 class CustomerChatMessageParams(BaseModel):
-    session_id: Optional[str] = None
+    session_id: str | None = None
     message: str
     email: str # Used to securely scope data access
-    ui_context: Optional[Dict[str, Any]] = None
+    ui_context: dict[str, Any] | None = None
 
 class CreateSessionParams(BaseModel):
-    title: Optional[str] = "New Session"
+    title: str | None = "New Session"
     user_id: str # Ideally from auth token
 
 class SessionResponse(BaseModel):
@@ -30,7 +32,7 @@ class SessionResponse(BaseModel):
 class ChatResponse(BaseModel):
     session_id: str
     message: str
-    tool_calls_executed: List[str] = []
+    tool_calls_executed: list[str] = []
 
 # --- Tool Call Router ---
 def execute_internal_tool(function_name: str, arguments: dict):
@@ -218,8 +220,8 @@ async def handle_chat_message(params: ChatMessageParams):
             content = response_message.get("content", "")
             
             # Qwen Fallback: If no native tool_calls, but content contains <tool_call> JSON
-            import re
             import json
+            import re
             import uuid
             if not response_message.get("tool_calls") and "<tool_call>" in content:
                 tool_call_match = re.search(r'<tool_call>\s*({.*?})\s*</tool_call>', content, re.DOTALL)
@@ -272,7 +274,7 @@ async def handle_chat_message(params: ChatMessageParams):
         if final_answer:
             final_answer = re.sub(r'<think>.*?</think>', '', final_answer, flags=re.DOTALL).strip()
     except Exception as e:
-        final_answer = f"I encountered an error connecting to the Intelligence API. Please try again. (Details: {str(e)})"
+        final_answer = f"I encountered an error connecting to the Intelligence API. Please try again. (Details: {e!s})"
         tool_calls_executed = []
 
     # 5. Save final Assistant answer
@@ -365,8 +367,8 @@ async def handle_customer_chat_message(params: CustomerChatMessageParams):
             response_message = response_json["choices"][0]["message"]
             content = response_message.get("content", "")
             
-            import re
             import json
+            import re
             import uuid
             if not response_message.get("tool_calls") and "<tool_call>" in content:
                 tool_call_match = re.search(r'<tool_call>\s*({.*?})\s*</tool_call>', content, re.DOTALL)
@@ -407,7 +409,7 @@ async def handle_customer_chat_message(params: CustomerChatMessageParams):
         if final_answer:
             final_answer = re.sub(r'<think>.*?</think>', '', final_answer, flags=re.DOTALL).strip()
     except Exception as e:
-        final_answer = f"I encountered an error connecting to Lexora Support. Please try again. (Details: {str(e)})"
+        final_answer = f"I encountered an error connecting to Lexora Support. Please try again. (Details: {e!s})"
         tool_calls_executed = []
 
     db.table("chat_messages").insert({

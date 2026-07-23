@@ -19,12 +19,12 @@ from typing import Any, Dict
 
 from engines.layer3.canonical import (
     build_canonical_text,
-    normalize_invoice,
     is_valid_sha256,
+    normalize_invoice,
 )
-from engines.layer3.embeddings import get_text_embedding, get_media_embedding
-from engines.layer3.qdrant_client import QdrantConnector
 from engines.layer3.diagnostics import DiagnosticsTracker
+from engines.layer3.embeddings import get_media_embedding, get_text_embedding
+from engines.layer3.qdrant_client import QdrantConnector
 
 
 def run_tier2(
@@ -44,7 +44,7 @@ def run_tier2(
         try:
             return _run_tier2_cloud(db, claim, line_items, documents, cfg, diag)
         except Exception as e:
-            diag.record_fallback("tier2", "fallback_local", f"Cloud unexpected error: {str(e)}")
+            diag.record_fallback("tier2", "fallback_local", f"Cloud unexpected error: {e!s}")
             # Fall through to local
     else:
         diag.record_service("cohere", used=False, skipped_reason="disabled")

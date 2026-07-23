@@ -1,10 +1,11 @@
 """Layer 3 — Embeddings Client
 Handles text embeddings via Cohere and media embeddings via Jina HTTP API.
 """
-import time
 import base64
+import time
+from typing import List, Optional, Tuple
+
 import requests
-from typing import Optional, Tuple, List
 
 try:
     import cohere
@@ -13,7 +14,7 @@ except ImportError:
     COHERE_AVAILABLE = False
 
 
-def get_text_embedding(text: str, cfg: dict) -> Tuple[Optional[List[float]], Optional[str], int]:
+def get_text_embedding(text: str, cfg: dict) -> tuple[list[float] | None, str | None, int]:
     """
     Get text embedding from Cohere.
     Returns: (embedding_list, error_message, latency_ms)
@@ -62,10 +63,10 @@ def get_text_embedding(text: str, cfg: dict) -> Tuple[Optional[List[float]], Opt
 
     except Exception as e:
         elapsed = int(time.time() * 1000) - start_ms
-        return None, f"Cohere embed error: {str(e)}", elapsed
+        return None, f"Cohere embed error: {e!s}", elapsed
 
 
-def get_media_embedding(file_bytes: bytes, content_type: str, cfg: dict) -> Tuple[Optional[List[float]], Optional[str], int]:
+def get_media_embedding(file_bytes: bytes, content_type: str, cfg: dict) -> tuple[list[float] | None, str | None, int]:
     """
     Get media embedding via Jina API using direct HTTP calls.
     Returns: (embedding_list, error_message, latency_ms)
@@ -126,7 +127,7 @@ def get_media_embedding(file_bytes: bytes, content_type: str, cfg: dict) -> Tupl
 
     except requests.RequestException as e:
         elapsed = int(time.time() * 1000) - start_ms
-        return None, f"Jina HTTP error: {str(e)}", elapsed
+        return None, f"Jina HTTP error: {e!s}", elapsed
     except Exception as e:
         elapsed = int(time.time() * 1000) - start_ms
-        return None, f"Jina unexpected error: {str(e)}", elapsed
+        return None, f"Jina unexpected error: {e!s}", elapsed

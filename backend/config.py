@@ -1,8 +1,9 @@
 """Lexora Backend — Configuration"""
 import os
-from pathlib import Path
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings
 
 # Find .env file — check backend/ dir first, then project root
 _this_dir = Path(__file__).resolve().parent
@@ -34,6 +35,6 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     return Settings()

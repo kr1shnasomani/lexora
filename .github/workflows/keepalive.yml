@@ -1,0 +1,48 @@
+name: "Keep-Alive"
+
+# Pings every free-tier dependency daily so none of them auto-pause/delete
+# from inactivity. Tightest real window is Neo4j Aura Free (pauses at 72h,
+# deleted after 90 days paused) — daily leaves comfortable margin on all of:
+#   Neo4j Aura Free:  pauses after 72h inactivity
+#   Qdrant Cloud Free: suspended after 1 week, deleted after 4 weeks
+#   Supabase Free:    paused after 7 days of no real DB activity
+# Render's own free-tier sleep (15 min idle) is a different problem — a
+# daily ping doesn't fight that, it's just a cold-start delay, not data loss.
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily at 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase (real DB query, not just a cached endpoint)
+        run: |
+          curl -sf "${{ secrets.SUPABASE_URL }}/rest/v1/claims?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -o /dev/null -w "Supabase: HTTP %{http_code}\n"
+
+      - name: Ping Neo4j Aura
+        run: |
+          curl -sf -X POST "https://${{ secrets.NEO4J_HOST }}/db/${{ secrets.NEO4J_DATABASE }}/query/v2" \
+            -u "${{ secrets.NEO4J_USER }}:${{ secrets.NEO4J_PASSWORD }}" \
+            -H "Content-Type: application/json" \
+            -d '{"statement":"RETURN 1"}' \
+            -o /dev/null -w "Neo4j: HTTP %{http_code}\n"
+
+      - name: Ping Qdrant
+        run: |
+          curl -sf "${{ secrets.QDRANT_URL }}/collections" \
+            -H "api-key: ${{ secrets.QDRANT_API_KEY }}" \
+            -o /dev/null -w "Qdrant: HTTP %{http_code}\n"
+
+      - name: Ping Render backend
+        run: |
+          curl -sf "${{ secrets.RENDER_BACKEND_URL }}/health" \
+            -o /dev/null -w "Render: HTTP %{http_code}\n"

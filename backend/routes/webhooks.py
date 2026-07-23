@@ -1,14 +1,16 @@
 """Lexora Backend — n8n Webhook Handler"""
-import json
 import asyncio
-import httpx
+import json
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, BackgroundTasks, File, UploadFile, Form
-from database import get_supabase
+
+import httpx
+from config import get_settings
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
 from models import N8NExtractionPayload
 from services.audit import log_audit_event
+
+from database import get_supabase
 from routes.claims import run_full_pipeline
-from config import get_settings
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 
@@ -186,10 +188,10 @@ async def proxy_to_n8n(
     except httpx.HTTPError as e:
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to forward file to n8n: {str(e)}. Make sure n8n is running at {settings.n8n_webhook_url}"
+            detail=f"Failed to forward file to n8n: {e!s}. Make sure n8n is running at {settings.n8n_webhook_url}"
         )
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Unexpected error: {str(e)}"
+            detail=f"Unexpected error: {e!s}"
         )

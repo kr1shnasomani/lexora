@@ -3,11 +3,19 @@ Handles text and media collections mapping vectors from Cohere/Jina to claims/do
 """
 import time
 import uuid
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.http.models import Distance, VectorParams, PointStruct, UpdateStatus, Filter, FieldCondition, MatchValue
+    from qdrant_client.http.models import (
+        Distance,
+        FieldCondition,
+        Filter,
+        MatchValue,
+        PointStruct,
+        UpdateStatus,
+        VectorParams,
+    )
     QDRANT_AVAILABLE = True
 except ImportError:
     QDRANT_AVAILABLE = False
@@ -16,7 +24,7 @@ except ImportError:
 class QdrantConnector:
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        self.client: Optional[QdrantClient] = None
+        self.client: QdrantClient | None = None
         
         url = cfg.get("qdrant_url")
         api_key = cfg.get("qdrant_api_key")
@@ -46,11 +54,11 @@ class QdrantConnector:
             else:
                 info = self.client.get_collection(collection_name)
                 # Ensure vector config size matches
-                if hasattr(info.config.params, "vectors") and \
-                   hasattr(info.config.params.vectors, "size") and \
-                   info.config.params.vectors.size != vector_size:
-                    return False
-                return True
+                return not (
+                    hasattr(info.config.params, "vectors")
+                    and hasattr(info.config.params.vectors, "size")
+                    and info.config.params.vectors.size != vector_size
+                )
         except Exception:
             # Fallback on failure to create/check
             return False
@@ -62,7 +70,7 @@ class QdrantConnector:
         except Exception:
             return str(uuid.uuid5(uuid.NAMESPACE_OID, original_id))
 
-    def point_exists(self, collection_name: str, point_id: str) -> Tuple[bool, Optional[str], int]:
+    def point_exists(self, collection_name: str, point_id: str) -> tuple[bool, str | None, int]:
         """Check if a point exists (idempotency check) via exact UUID get."""
         start_ms = int(time.time() * 1000)
         if not self.client:
@@ -80,9 +88,9 @@ class QdrantConnector:
             return len(pts) > 0, None, elapsed
         except Exception as e:
             elapsed = int(time.time() * 1000) - start_ms
-            return False, f"Check error: {str(e)}", elapsed
+            return False, f"Check error: {e!s}", elapsed
 
-    def retrieve_point(self, collection_name: str, point_id: str) -> Tuple[Optional[List[float]], dict, Optional[str], int]:
+    def retrieve_point(self, collection_name: str, point_id: str) -> tuple[list[float] | None, dict, str | None, int]:
         """Retrieve vector of a point, if it exists, via exact UUID get."""
         start_ms = int(time.time() * 1000)
         if not self.client:
@@ -104,9 +112,9 @@ class QdrantConnector:
             return None, {}, None, elapsed
         except Exception as e:
             elapsed = int(time.time() * 1000) - start_ms
-            return None, {}, f"Retrieve error: {str(e)}", elapsed
+            return None, {}, f"Retrieve error: {e!s}", elapsed
 
-    def upsert_point(self, collection_name: str, point_id: str, vector: List[float], payload: dict) -> Tuple[bool, Optional[str], int]:
+    def upsert_point(self, collection_name: str, point_id: str, vector: list[float], payload: dict) -> tuple[bool, str | None, int]:
         """Upsert a single point, lazily creating collection if needed."""
         start_ms = int(time.time() * 1000)
         if not self.client:
@@ -129,9 +137,9 @@ class QdrantConnector:
             return False, f"Upsert status: {res.status}", elapsed
         except Exception as e:
             elapsed = int(time.time() * 1000) - start_ms
-            return False, f"Upsert error: {str(e)}", elapsed
+            return False, f"Upsert error: {e!s}", elapsed
 
-    def search_points(self, collection_name: str, vector: List[float], top_k: int, filter_dict: Optional[dict] = None) -> Tuple[List[dict], Optional[str], int]:
+    def search_points(self, collection_name: str, vector: list[float], top_k: int, filter_dict: dict | None = None) -> tuple[list[dict], str | None, int]:
         """Search similar vectors."""
         start_ms = int(time.time() * 1000)
         if not self.client:
@@ -167,4 +175,4 @@ class QdrantConnector:
             
         except Exception as e:
             elapsed = int(time.time() * 1000) - start_ms
-            return [], f"Search error: {str(e)}", elapsed
+            return [], f"Search error: {e!s}", elapsed

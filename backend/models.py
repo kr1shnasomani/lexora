@@ -1,8 +1,9 @@
 """Lexora Backend — Pydantic Models"""
-from pydantic import BaseModel, Field
-from typing import Optional, Any
 from datetime import date, datetime
 from enum import Enum
+from typing import Any, Optional
+
+from pydantic import BaseModel, Field
 
 
 # ── Enums ─────────────────────────────────────────────────────
@@ -38,80 +39,80 @@ class IncidentType(str, Enum):
 class ClaimCreateRequest(BaseModel):
     claim_number: str
     policy_number: str
-    idempotency_key: Optional[str] = None
-    claimant_name: Optional[str] = None
-    claimant_phone: Optional[str] = None
-    incident_date: Optional[str] = None
-    incident_type: Optional[str] = None
-    incident_description: Optional[str] = None
-    claimed_amount: Optional[float] = None
-    provider_name: Optional[str] = None
-    invoice_number: Optional[str] = None
-    extraction_raw: Optional[dict] = Field(default_factory=dict)
-    extraction_confidence: Optional[float] = None
-    extraction_warnings: Optional[list] = Field(default_factory=list)
+    idempotency_key: str | None = None
+    claimant_name: str | None = None
+    claimant_phone: str | None = None
+    incident_date: str | None = None
+    incident_type: str | None = None
+    incident_description: str | None = None
+    claimed_amount: float | None = None
+    provider_name: str | None = None
+    invoice_number: str | None = None
+    extraction_raw: dict | None = Field(default_factory=dict)
+    extraction_confidence: float | None = None
+    extraction_warnings: list | None = Field(default_factory=list)
 
 
 class N8NExtractionPayload(BaseModel):
     """Payload from n8n webhook after extraction completes"""
     execution_id: str
-    claim_number: Optional[str] = None
-    policy_number: Optional[str] = None
-    claimant_name: Optional[str] = None
-    claimant_phone: Optional[str] = None
-    incident_date: Optional[str] = None
-    incident_type: Optional[str] = None
-    incident_description: Optional[str] = None
-    claimed_amount: Optional[float] = None
-    provider_name: Optional[str] = None
-    invoice_number: Optional[str] = None
-    extraction_raw: Optional[dict] = Field(default_factory=dict)
-    extraction_confidence: Optional[float] = None
-    extraction_warnings: Optional[list] = Field(default_factory=list)
+    claim_number: str | None = None
+    policy_number: str | None = None
+    claimant_name: str | None = None
+    claimant_phone: str | None = None
+    incident_date: str | None = None
+    incident_type: str | None = None
+    incident_description: str | None = None
+    claimed_amount: float | None = None
+    provider_name: str | None = None
+    invoice_number: str | None = None
+    extraction_raw: dict | None = Field(default_factory=dict)
+    extraction_confidence: float | None = None
+    extraction_warnings: list | None = Field(default_factory=list)
     needs_review: bool = False
-    file_names: Optional[list[str]] = Field(default_factory=list)
-    storage_keys: Optional[list[str]] = Field(default_factory=list)
+    file_names: list[str] | None = Field(default_factory=list)
+    storage_keys: list[str] | None = Field(default_factory=list)
 
 
 class ManualReviewRequest(BaseModel):
     reviewer_id: str
     decision: FinalDecision
-    approved_amount: Optional[float] = None
-    rationale: Optional[str] = None
-    feedback_category: Optional[str] = None
-    feedback_notes: Optional[str] = None
+    approved_amount: float | None = None
+    rationale: str | None = None
+    feedback_category: str | None = None
+    feedback_notes: str | None = None
 
 
 # ── Response Models ───────────────────────────────────────────
 class ClaimResponse(BaseModel):
     id: str
     claim_number: str
-    policy_id: Optional[str] = None
+    policy_id: str | None = None
     status: str
-    final_decision: Optional[str] = None
-    claimant_name: Optional[str] = None
-    claimant_phone: Optional[str] = None
-    incident_date: Optional[str] = None
-    incident_type: Optional[str] = None
-    incident_description: Optional[str] = None
-    claimed_amount: Optional[float] = None
-    approved_amount: Optional[float] = None
-    provider_name: Optional[str] = None
-    invoice_number: Optional[str] = None
-    extraction_confidence: Optional[float] = None
-    extraction_warnings: Optional[Any] = None
-    extraction_raw: Optional[Any] = None
-    policy_decision: Optional[Any] = None
-    fraud_score: Optional[float] = None
-    fraud_analysis: Optional[Any] = None
-    decision_rationale: Optional[str] = None
-    decision_output: Optional[Any] = None
-    reviewed_by: Optional[str] = None
-    reviewed_at: Optional[str] = None
-    submitted_at: Optional[str] = None
-    processed_at: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    final_decision: str | None = None
+    claimant_name: str | None = None
+    claimant_phone: str | None = None
+    incident_date: str | None = None
+    incident_type: str | None = None
+    incident_description: str | None = None
+    claimed_amount: float | None = None
+    approved_amount: float | None = None
+    provider_name: str | None = None
+    invoice_number: str | None = None
+    extraction_confidence: float | None = None
+    extraction_warnings: Any | None = None
+    extraction_raw: Any | None = None
+    policy_decision: Any | None = None
+    fraud_score: float | None = None
+    fraud_analysis: Any | None = None
+    decision_rationale: str | None = None
+    decision_output: Any | None = None
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    submitted_at: str | None = None
+    processed_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class AuditEventResponse(BaseModel):
@@ -119,10 +120,10 @@ class AuditEventResponse(BaseModel):
     claim_id: str
     stage: str
     event_type: str
-    payload: Optional[Any] = None
-    model_versions: Optional[Any] = None
-    duration_ms: Optional[int] = None
-    created_at: Optional[str] = None
+    payload: Any | None = None
+    model_versions: Any | None = None
+    duration_ms: int | None = None
+    created_at: str | None = None
 
 
 class PolicyInfo(BaseModel):

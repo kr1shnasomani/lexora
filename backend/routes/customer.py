@@ -1,7 +1,9 @@
 """Lexora Backend — Customer Portal APIs"""
-from fastapi import APIRouter, HTTPException, Query
-from database import get_supabase
 import json
+
+from fastapi import APIRouter, HTTPException, Query
+
+from database import get_supabase
 
 router = APIRouter(prefix="/customer", tags=["Customer"])
 
@@ -472,6 +474,8 @@ async def get_notif_prefs(email: str = Query(...)):
     ]
 
 from pydantic import BaseModel
+
+
 class PrefUpdate(BaseModel):
     key: str
     enabled: bool

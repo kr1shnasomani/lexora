@@ -11,10 +11,10 @@ runs the full Layer 3 Fraud Engine on each, updates the database, and prints a d
 
 from __future__ import annotations
 
-import sys
 import json
-from pathlib import Path
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 # ── Path resolution ──────────────────────────────────────────────────────────
 _this_file = Path(__file__).resolve()
@@ -22,8 +22,9 @@ _backend_dir = _this_file.parent.parent
 if str(_backend_dir) not in sys.path:
     sys.path.insert(0, str(_backend_dir))
 
-from database import get_supabase
 from engines.layer3.main import run_fraud_check
+
+from database import get_supabase
 
 
 def run_pending() -> dict:

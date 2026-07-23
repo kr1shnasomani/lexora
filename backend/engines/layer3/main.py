@@ -18,15 +18,15 @@ DB writes policy:
 """
 import time
 
-from database import get_supabase
 from services.audit import AuditTimer
 
+from database import get_supabase
 from engines.layer3.config import load_config
 from engines.layer3.diagnostics import DiagnosticsTracker
+from engines.layer3.fusion import run_fusion
 from engines.layer3.tier1 import run_tier1
 from engines.layer3.tier2 import run_tier2
 from engines.layer3.tier3 import run_tier3
-from engines.layer3.fusion import run_fusion
 
 
 def run_fraud_check(claim_id: str) -> dict:

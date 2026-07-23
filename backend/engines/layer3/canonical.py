@@ -86,6 +86,4 @@ def is_valid_sha256(hash_str: str) -> bool:
         return False
     if not _SHA256_RE.match(hash_str):
         return False
-    if _UNIFORM_RE.match(hash_str.lower()):
-        return False
-    return True
+    return not _UNIFORM_RE.match(hash_str.lower())

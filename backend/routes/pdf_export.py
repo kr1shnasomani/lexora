@@ -1,11 +1,13 @@
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
-from database import get_supabase
 import io
 import time
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
+
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from reportlab.lib.colors import Color
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+
+from database import get_supabase
 
 router = APIRouter(prefix="/claims", tags=["PDF Export"])
 
@@ -303,4 +305,4 @@ async def export_pdf(claim_id: str, email: str = Query(...)):
         import traceback
         err_msg = traceback.format_exc()
         print(f"PDF Gen Error: {e}\n{err_msg}")
-        raise HTTPException(status_code=500, detail=f"Internal server error generating PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error generating PDF: {e!s}")

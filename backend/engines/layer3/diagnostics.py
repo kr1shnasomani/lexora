@@ -20,7 +20,7 @@ class DiagnosticsTracker:
         self._tier_times: dict[str, int] = {}
         self._fallbacks: list[dict] = []
         self._primary_path: dict[str, str] = {}
-        self._start_ms: Optional[int] = None
+        self._start_ms: int | None = None
 
     def start_total(self):
         self._start_ms = int(time.time() * 1000)
@@ -31,11 +31,11 @@ class DiagnosticsTracker:
         self,
         name: str,
         used: bool,
-        ok: Optional[bool] = None,
+        ok: bool | None = None,
         fallback_used: bool = False,
-        latency_ms: Optional[int] = None,
-        error: Optional[str] = None,
-        skipped_reason: Optional[str] = None,
+        latency_ms: int | None = None,
+        error: str | None = None,
+        skipped_reason: str | None = None,
     ):
         entry: dict = {"used": used}
         if used:

@@ -1,5 +1,5 @@
-import urllib.request
 import json
+import urllib.request
 
 try:
     res = urllib.request.urlopen('http://localhost:8000/api/claims?page_size=5')

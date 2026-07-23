@@ -1,7 +1,6 @@
 """Lexora Backend — Supabase Client"""
-from supabase import create_client, Client
 from config import get_settings
-
+from supabase import Client, create_client
 
 _client: Client | None = None
 

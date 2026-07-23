@@ -1,6 +1,7 @@
 """Lexora Backend — Audit Service"""
 import json
 import time
+
 from database import get_supabase
 
 

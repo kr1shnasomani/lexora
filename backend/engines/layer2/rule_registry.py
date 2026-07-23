@@ -18,8 +18,8 @@ Return structure:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
-from typing import Callable
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers

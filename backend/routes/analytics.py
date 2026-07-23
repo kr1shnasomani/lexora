@@ -1,8 +1,10 @@
-from fastapi import APIRouter
-from database import get_supabase
 import json
-from datetime import datetime, timedelta
 import random
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter
+
+from database import get_supabase
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -39,7 +41,7 @@ async def get_analytics_summary():
         today = datetime.utcnow().date()
         unique_dates = [(today - timedelta(days=i)).isoformat() for i in range(3, -1, -1)]
     else:
-        unique_dates = sorted(list(set(dates)))
+        unique_dates = sorted(set(dates))
         if len(unique_dates) < 4:
             # Pad with preceding days safely
             last_dt = datetime.fromisoformat(unique_dates[0])
@@ -126,11 +128,11 @@ async def get_analytics_summary():
     # Decision Accuracy Heatmap mapped per distinct actual archetype
     # We will simulate the 5 pipeline stages alignment statically but accurately to the archetype ratio for visual safety.
     heatmap_rows = []
-    archetypes = set(c.get("incident_type") for c in claims if c.get("incident_type"))
+    archetypes = {c.get("incident_type") for c in claims if c.get("incident_type")}
     if not archetypes:
         archetypes = ["damage", "theft", "illness", "accident"]
-        
-    for arch in sorted(list(archetypes)):
+
+    for arch in sorted(archetypes):
         cells = []
         arch_claims = [c for c in claims if c.get("incident_type") == arch]
         arch_overrides = sum(1 for c in arch_claims if c.get("reviewed_by"))

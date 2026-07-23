@@ -1,7 +1,9 @@
-from fastapi import APIRouter
-from database import get_supabase
 import json
 from datetime import datetime
+
+from fastapi import APIRouter
+
+from database import get_supabase
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -286,10 +288,9 @@ async def get_dashboard_summary():
             t3 = fa["tier3"]
             if t3 and isinstance(t3, dict) and "graph_excerpt" in t3:
                 excerpt = t3["graph_excerpt"]
-                if excerpt and isinstance(excerpt, dict):
-                    if excerpt.get("nodes") and excerpt.get("edges"):
-                        graph_excerpt = excerpt
-                        break
+                if excerpt and isinstance(excerpt, dict) and excerpt.get("nodes") and excerpt.get("edges"):
+                    graph_excerpt = excerpt
+                    break
     
     return {
         "kpis": kpis,

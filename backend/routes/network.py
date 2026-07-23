@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+import networkx as nx
 from config import get_settings
 from engines.layer3.neo4j_client import Neo4jConnector
+from fastapi import APIRouter
+
 from database import get_supabase
-import networkx as nx
 
 router = APIRouter(prefix="/network", tags=["Network Graph"])
 
@@ -13,6 +14,7 @@ async def get_network_graph():
     derived dynamically from Neo4j.
     """
     import os
+
     from dotenv import load_dotenv
     load_dotenv()
     

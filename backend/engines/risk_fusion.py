@@ -9,8 +9,10 @@ Decision logic:
   else → manual_review
 """
 import json
-from database import get_supabase
+
 from services.audit import AuditTimer
+
+from database import get_supabase
 
 
 def run_decision(claim_id: str) -> dict:

@@ -1,24 +1,26 @@
 """Lexora Backend — FastAPI Application"""
-import sys
-import os
 import asyncio
+import os
+import sys
 
 # Add backend dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from config import get_settings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from config import get_settings
-from routes.claims import router as claims_router, process_pending
-from routes.webhooks import router as webhooks_router
-from routes.customer import router as customer_router, user_router, notifications_router
-from routes.dashboard import router as dashboard_router
+from routes.analytics import router as analytics_router
 from routes.auth import router as auth_router
+from routes.chat import router as chat_router
+from routes.claims import process_pending
+from routes.claims import router as claims_router
+from routes.customer import notifications_router, user_router
+from routes.customer import router as customer_router
+from routes.dashboard import router as dashboard_router
+from routes.network import router as network_router
 from routes.pdf_export import router as pdf_export_router
 from routes.settings import router as config_router
-from routes.network import router as network_router
-from routes.chat import router as chat_router
-from routes.analytics import router as analytics_router
+from routes.webhooks import router as webhooks_router
 
 settings = get_settings()
 

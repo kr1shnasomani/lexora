@@ -1,19 +1,21 @@
 """Lexora Backend — Claims API Routes"""
 import json
 from datetime import datetime
+
+from engines.fraud_engine import run_fraud_check
+from engines.layer2 import evaluate_policy
+from engines.risk_fusion import run_decision
 from fastapi import APIRouter, HTTPException, Query
-from database import get_supabase
 from models import (
+    AuditEventResponse,
     ClaimCreateRequest,
     ClaimResponse,
     ManualReviewRequest,
-    AuditEventResponse,
 )
+from services.audit import get_audit_trail, log_audit_event
 from state_machine import enforce_transition
-from services.audit import log_audit_event, get_audit_trail
-from engines.layer2 import evaluate_policy
-from engines.fraud_engine import run_fraud_check
-from engines.risk_fusion import run_decision
+
+from database import get_supabase
 
 router = APIRouter(prefix="/claims", tags=["Claims"])
 
@@ -148,7 +150,7 @@ async def get_document_url(claim_id: str, doc_id: str):
         signed_url = res.get("signedURL") or res.get("signedUrl")
         
         if not signed_url:
-            raise Exception("Failed to generate signed URL")
+            raise RuntimeError("Failed to generate signed URL")
             
         return {"url": signed_url}
     except Exception as e:

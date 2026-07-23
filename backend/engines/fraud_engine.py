@@ -8,6 +8,6 @@ The calling route (routes/claims.py) imports:
 
 This wrapper simply delegates to the modular Layer 3 implementation.
 """
-from engines.layer3.main import run_fraud_check  # noqa: F401 – re-export
+from engines.layer3.main import run_fraud_check
 
 __all__ = ["run_fraud_check"]

@@ -19,13 +19,13 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from engines.layer3.canonical import (
-    normalize_phone,
-    normalize_name,
-    normalize_invoice,
     is_valid_sha256,
+    normalize_invoice,
+    normalize_name,
+    normalize_phone,
 )
-from engines.layer3.neo4j_client import Neo4jConnector
 from engines.layer3.diagnostics import DiagnosticsTracker
+from engines.layer3.neo4j_client import Neo4jConnector
 
 
 def run_tier3(
@@ -43,7 +43,7 @@ def run_tier3(
         try:
             return _run_tier3_cloud(db, claim, documents, cfg, diag, tier3_start)
         except Exception as e:
-            diag.record_fallback("tier3", "fallback_relational", f"Cloud unexpected error: {str(e)}")
+            diag.record_fallback("tier3", "fallback_relational", f"Cloud unexpected error: {e!s}")
             # Fall through to local
     else:
         diag.record_service("neo4j", used=False, skipped_reason="disabled")

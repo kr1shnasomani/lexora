@@ -27,8 +27,9 @@ import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from database import get_supabase
 from services.audit import log_audit_event
+
+from database import get_supabase
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants

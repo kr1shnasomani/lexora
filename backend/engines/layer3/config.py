@@ -31,6 +31,19 @@ def _read_config_value(db, key: str, default: Any) -> Any:
     return default
 
 
+def _clean_env(key: str, default: str) -> str:
+    """Read an env var, stripping stray surrounding quotes.
+
+    Docker's --env-file / Compose env_file parsing does not strip quotes the
+    way a shell or python-dotenv would, so a value like KEY="5" in .env is
+    injected into os.environ as the literal string '"5"'. This breaks
+    int()/float() casts and corrupts URIs, so every env read in this module
+    goes through here regardless of source.
+    """
+    v = os.environ.get(key, default)
+    return v.strip().strip('"').strip("'") if isinstance(v, str) else v
+
+
 def load_config(db) -> dict:
     """
     Returns a consolidated config dict for Layer 3.
@@ -105,7 +118,7 @@ def load_config(db) -> dict:
         db_val = _read_config_value(db, key, None)
         
         # Env var overrides everything
-        v = os.environ.get(key, "")
+        v = _clean_env(key, "")
         if not v and db_val is not None:
             v = str(db_val)
             
@@ -120,27 +133,27 @@ def load_config(db) -> dict:
     cfg["enable_neo4j"] = _feature_bool("FRAUD_LAYER3_ENABLE_NEO4J", False)
     cfg["enable_jina_media"] = _feature_bool("FRAUD_LAYER3_ENABLE_JINA_MEDIA", False)
     cfg["enable_rerank"] = _feature_bool("FRAUD_LAYER3_ENABLE_RERANK", False)
-    cfg["jina_max_files_per_claim"] = int(os.environ.get("FRAUD_LAYER3_JINA_MAX_FILES_PER_CLAIM", "1"))
-    cfg["media_max_mb"] = int(os.environ.get("FRAUD_LAYER3_MEDIA_MAX_MB", "8"))
-    cfg["external_max_seconds"] = int(os.environ.get("FRAUD_LAYER3_EXTERNAL_MAX_SECONDS", "8"))
-    cfg["qdrant_top_k"] = int(os.environ.get("FRAUD_LAYER3_QDRANT_TOP_K", "5"))
+    cfg["jina_max_files_per_claim"] = int(_clean_env("FRAUD_LAYER3_JINA_MAX_FILES_PER_CLAIM", "1"))
+    cfg["media_max_mb"] = int(_clean_env("FRAUD_LAYER3_MEDIA_MAX_MB", "8"))
+    cfg["external_max_seconds"] = int(_clean_env("FRAUD_LAYER3_EXTERNAL_MAX_SECONDS", "8"))
+    cfg["qdrant_top_k"] = int(_clean_env("FRAUD_LAYER3_QDRANT_TOP_K", "5"))
 
     # ── Service Credentials (used in Pass 2) ─────────────────────
-    cfg["cohere_api_key"] = os.environ.get("COHERE_API_KEY", "")
-    cfg["cohere_embed_model"] = os.environ.get("COHERE_EMBED_MODEL", "embed-english-v3.0")
-    cfg["cohere_rerank_model"] = os.environ.get("COHERE_RERANK_MODEL", "")
-    cfg["jina_api_key"] = os.environ.get("JINA_API_KEY", "")
-    cfg["jina_embed_model"] = os.environ.get("JINA_EMBED_MODEL", "")
-    cfg["qdrant_url"] = os.environ.get("QDRANT_URL", "")
-    cfg["qdrant_api_key"] = os.environ.get("QDRANT_API_KEY", "")
-    cfg["qdrant_collection_claims"] = os.environ.get("QDRANT_COLLECTION_CLAIMS", "claims_v1")
-    cfg["qdrant_collection_text"] = os.environ.get("QDRANT_COLLECTION_TEXT", "claims_v1_text")
-    cfg["qdrant_collection_media"] = os.environ.get("QDRANT_COLLECTION_MEDIA", "claims_v1_media")
-    cfg["qdrant_timeout_seconds"] = int(os.environ.get("QDRANT_TIMEOUT_SECONDS", "5"))
-    cfg["neo4j_uri"] = os.environ.get("NEO4J_URI", "")
-    cfg["neo4j_user"] = os.environ.get("NEO4J_USER", "neo4j")
-    cfg["neo4j_password"] = os.environ.get("NEO4J_PASSWORD", "")
-    cfg["neo4j_database"] = os.environ.get("NEO4J_DATABASE", "neo4j")
-    cfg["neo4j_timeout_seconds"] = int(os.environ.get("NEO4J_TIMEOUT_SECONDS", "5"))
+    cfg["cohere_api_key"] = _clean_env("COHERE_API_KEY", "")
+    cfg["cohere_embed_model"] = _clean_env("COHERE_EMBED_MODEL", "embed-english-v3.0")
+    cfg["cohere_rerank_model"] = _clean_env("COHERE_RERANK_MODEL", "")
+    cfg["jina_api_key"] = _clean_env("JINA_API_KEY", "")
+    cfg["jina_embed_model"] = _clean_env("JINA_EMBED_MODEL", "")
+    cfg["qdrant_url"] = _clean_env("QDRANT_URL", "")
+    cfg["qdrant_api_key"] = _clean_env("QDRANT_API_KEY", "")
+    cfg["qdrant_collection_claims"] = _clean_env("QDRANT_COLLECTION_CLAIMS", "claims_v1")
+    cfg["qdrant_collection_text"] = _clean_env("QDRANT_COLLECTION_TEXT", "claims_v1_text")
+    cfg["qdrant_collection_media"] = _clean_env("QDRANT_COLLECTION_MEDIA", "claims_v1_media")
+    cfg["qdrant_timeout_seconds"] = int(_clean_env("QDRANT_TIMEOUT_SECONDS", "5"))
+    cfg["neo4j_uri"] = _clean_env("NEO4J_URI", "")
+    cfg["neo4j_user"] = _clean_env("NEO4J_USER", "neo4j")
+    cfg["neo4j_password"] = _clean_env("NEO4J_PASSWORD", "")
+    cfg["neo4j_database"] = _clean_env("NEO4J_DATABASE", "neo4j")
+    cfg["neo4j_timeout_seconds"] = int(_clean_env("NEO4J_TIMEOUT_SECONDS", "5"))
 
     return cfg
