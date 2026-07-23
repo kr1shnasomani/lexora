@@ -91,7 +91,7 @@ export default function DocsPage() {
         setDownloadingDocs(prev => ({ ...prev, [claim.id]: true }))
         try {
             // First we need to find the document_id associated with this claim
-            const detailRes = await fetch(`/api/customer/policies/${claim.policy_id}?email=${encodeURIComponent(user.email)}`)
+            const detailRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/customer/policies/${claim.policy_id}?email=${encodeURIComponent(user.email)}`)
             if (!detailRes.ok) throw new Error("Could not fetch policy structure")
             const detailData = await detailRes.json()
 
@@ -99,7 +99,7 @@ export default function DocsPage() {
             const doc = detailData.documents?.find(d => d.claim_number === claim.claim_number)
             if (!doc) throw new Error("Could not verify document securely in Supabase Storage.")
 
-            const res = await fetch(`/api/customer/claims/download/${doc.id}?email=${encodeURIComponent(user.email)}`)
+            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/customer/claims/download/${doc.id}?email=${encodeURIComponent(user.email)}`)
             if (!res.ok) throw new Error("Failed to generate secure download link. Is your backend running?")
             const data = await res.json()
             if (data.url) window.open(data.url, '_blank')

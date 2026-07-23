@@ -32,4 +32,5 @@ COPY . .
 EXPOSE 8000
 
 # Production: no --reload. Use the compose dev profile for hot-reload.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form so $PORT (injected by some PaaS hosts) overrides the 8000 default.
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}

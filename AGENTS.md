@@ -2,7 +2,7 @@
   <img src="frontend/public/lexora-logo.png" alt="Lexora Logo" width="100" />
 </p>
 
-# Lexora — Agent Quickstart
+# Lexora: Agent Quickstart
 
 **Lexora** is a 5-layer neuro-symbolic AI insurance claims processing engine. It takes raw claim documents (via n8n), extracts structured data (L1), validates against policy rules (L2), scores for fraud with vector + graph AI (L3), applies economic decision logic (L4), and stores everything in Supabase with full audit trails. The frontend is a React 18 + Vite admin and customer portal.
 
@@ -32,12 +32,12 @@ backend/
   models.py            All Pydantic schemas
   state_machine.py     validate_transition() / enforce_transition()
   routes/
-    claims.py          /api/claims — CRUD + pipeline triggers
-    webhooks.py        /api/webhooks — n8n L1 intake
-    customer.py        /api/customer/* — customer-scoped endpoints
+    claims.py          /api/claims: CRUD + pipeline triggers
+    webhooks.py        /api/webhooks: n8n L1 intake
+    customer.py        /api/customer/*: customer-scoped endpoints
     dashboard.py       /api/dashboard/summary
     auth.py            /api/auth/verify-email
-    chat.py            /api/chat/* — Groq tool-calling chat
+    chat.py            /api/chat/*: Groq tool-calling chat
     analytics.py       /api/analytics/summary
     network.py         /api/network/graph (Neo4j)
     settings.py        /api/config, /api/policies, /api/users
@@ -93,7 +93,7 @@ docs/
 | **UUID only** | `claims.id` is the sole cross-cutting identifier. Never use `claim_number` or `policy_number` as keys. |
 | **State machine** | All `claims.status` transitions go through `state_machine.py`. Invalid transitions raise HTTP 409. |
 | **Status ≠ decision** | `claims.status` = lifecycle stage. `claims.final_decision` = outcome. Never conflate. |
-| **Audit is immutable** | `audit_events` — no updates, no deletes. |
+| **Audit is immutable** | `audit_events` table: no updates, no deletes. |
 | **No hardcoded data** | Frontend computes all values from API responses. Use `.reduce()` not static numbers. |
 | **Customer scoping** | All `/api/customer/*` endpoints require `?email=` query param from `user.email`. |
 | **API base URL** | `VITE_API_URL` is baked into the bundle as a Docker build-arg. For local dev outside Docker, it falls back to `'http://localhost:8000'`. Never hardcode. |
@@ -131,6 +131,19 @@ docker compose up backend     # backend only
 docker compose up frontend    # frontend only
 docker compose up n8n         # n8n only
 ```
+
+---
+
+## Production Deployment
+
+Backend runs on **Render** (Docker Web Service, root directory `backend`, builds from `backend/Dockerfile`). Frontend runs on **Vercel** (Vite static build). They are two separate hosts, not a Vercel multi-service project: the backend needs a genuinely persistent process for the in-process `claim_sweeper` background task in `main.py`, which Vercel's function-based services (even container-runtime ones) do not provide, they scale to zero after 5 minutes idle.
+
+Key points for future changes:
+- `VITE_API_URL` is a Vite build-time env var. Changing it on Vercel requires a redeploy, not just a settings save.
+- `CORS_ORIGINS` on Render must list the exact Vercel domain(s) in use.
+- **Never call `fetch('/api/...')` with a bare relative path in frontend code.** Always prefix with `import.meta.env.VITE_API_URL || 'http://localhost:8000'` (or go through `lib/api.js`). The local Vite dev server proxies `/api` to `localhost:8000` (see `vite.config.js`), which masks this mistake in development; in production there is no such proxy, so a relative path silently 404s against Vercel's own domain instead of hitting the backend. This has happened before in `LoginPage.jsx` and `DocsPage.jsx`.
+- n8n (Layer 1) is not hosted in production by default, only available via local `docker compose`. `/api/webhooks/n8n-extraction` and `/api/n8n/claim-upload` will not work in production until n8n is hosted somewhere and `N8N_WEBHOOK_URL` points at it. Every other route is unaffected.
+- Qdrant is a shared cluster across multiple unrelated projects; collections are namespaced (`claims_v1_text`, `claims_v1_media`), so this is safe as long as new collection names don't collide with other projects on the same cluster.
 
 ---
 
